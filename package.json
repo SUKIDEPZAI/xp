@@ -1,0 +1,22 @@
+{
+  "name": "windows-xp-living-desktop",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Windows XP desktop simulation for web hosting, with a Rust/WebAssembly simulation core and optional Electron runtime",
+  "main": "main.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node scripts/serve-web.js",
+    "dev": "node scripts/serve-web.js",
+    "electron": "electron .",
+    "build:wasm": "cd rust-core && wasm-pack build --target web --release --out-dir ../ui/wasm-core --out-name xp_core",
+    "test:rust": "cargo test --manifest-path rust-core/Cargo.toml",
+    "check": "node --check main.js && node --check preload.js && node --check scripts/serve-web.js && node --check ui/host-adapter.js && node --check scripts/web-adapter-smoke.js && node --check ui/desktop.js && node --check ui/modules/event-bus.js && node --check ui/modules/storage-manager.js && node --check ui/modules/ai-engine.js && node --check ui/modules/window-manager.js && node --check ui/modules/context-menu.js && node --check ui/modules/stickman-runtime.js",
+    "test": "node scripts/smoke-test.js && node scripts/main-process-smoke.js && node scripts/web-adapter-smoke.js && node scripts/web-target-smoke.js"
+  },
+  "devDependencies": {
+    "electron": "^45.4.1"
+  }
+}

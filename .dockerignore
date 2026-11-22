@@ -1,0 +1,10 @@
+.git
+node_modules
+legacy
+scripts
+main.js
+preload.js
+IMPLEMENTATION_STATUS.md
+README.md
+*.zip
+.DS_Store

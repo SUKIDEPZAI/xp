@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; base-uri 'self'; object-src 'none'; frame-src 'self' https: http:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'">
+<title>Windows XP — Living Desktop</title>
+<link rel="stylesheet" href="desktop.css">
+</head>
+<body>
+
+<div id="desk"><div id="icons"></div></div>
+<div id="sm" hidden><div class="sh">👤 Administrator</div><div class="sc"><div class="l"></div><div class="r"></div></div><div class="sf"><button id="offb">⏻ Tắt máy</button></div></div>
+<div id="task"><button id="st"><svg viewBox="0 0 16 16" style="width:18px;height:18px"><path d="M1 3c3-2 5 1 7 0v5c-2 1-4-2-7 0z" fill="#f25022"/><path d="M9 3c2 1 4-1 6-1v5c-2 0-4 2-6 1z" fill="#7fba00"/><path d="M1 9c3-2 5 1 7 0v5c-2 1-4-2-7 0z" fill="#00a4ef"/><path d="M9 9c2 1 4-1 6-1v5c-2 0-4 2-6 1z" fill="#ffb900"/></svg> start</button><div id="quick-launch">
+<button type="button" data-launch="ie" title="Internet Explorer">🌐</button>
+<button type="button" data-launch="paint" title="Paint">🎨</button>
+<button type="button" data-launch="note" title="Notepad">📝</button>
+</div><div id="tasks"></div><div id="sys-tray"><span title="Kết nối mạng">◉</span><span title="Âm lượng">🔊</span></div><div id="clk"></div></div>
+<div id="off">Windows đã tắt. Bấm để khởi động lại.</div>
+
+<script src="host-adapter.js"></script>
+<script type="module" src="modules/event-bus.js"></script>
+<script type="module" src="modules/storage-manager.js"></script>
+<script type="module" src="modules/ai-engine.js"></script>
+<script type="module" src="modules/window-manager.js"></script>
+<script type="module" src="modules/context-menu.js"></script>
+<script type="module" src="modules/stickman-runtime.js"></script>
+<script type="module" src="desktop.js"></script>
+</body>
+</html>
