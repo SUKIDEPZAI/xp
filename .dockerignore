@@ -1,0 +1,14 @@
+.git
+node_modules
+legacy
+tests
+*.zip
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+rust-core/target
+ui/wasm-core/*.wasm
+ui/wasm-core/*.js
+ui/wasm-core/*.d.ts

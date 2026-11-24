@@ -1,0 +1,212 @@
+(() => {
+  const desk=document.getElementById('desk');
+  const canvas=document.createElement('canvas');canvas.className='stickman-layer';canvas.setAttribute('aria-hidden','true');desk.append(canvas);
+  const ctx=canvas.getContext('2d'),agents=new Map(),particles=[];
+  let lastFrame=0,lastAI=0,lastSave=0,animationFrame=0,running=false,visible=true;
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const uid=()=>globalThis.crypto?.randomUUID?.()||`char-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const action=value=>window.XPActions?.normalize(value)||'idle';
+  const stateNames={observe:'Quan sát',curious:'Tò mò',explore:'Khám phá',walk:'Đang đi',run:'Đang chạy',sneak:'Đi rón rén',follow:'Đang theo',avoid:'Đang né',jump:'Đang nhảy',fall:'Đang rơi',climb:'Đang leo',hang:'Đang bám',grab:'Đang nắm',drag:'Đang kéo',push:'Đang đẩy',pull:'Đang kéo về',wave:'Đang vẫy tay',think:'Đang suy nghĩ',talk:'Đang trò chuyện',draw:'Đang vẽ',interact:'Đang tương tác',play:'Đang chơi',rest:'Đang nghỉ',sleep:'Đang ngủ',celebrate:'Ăn mừng',startled:'Giật mình',escape:'Đang chạy trốn',socialize:'Đang giao tiếp',create:'Đang sáng tạo',idle:'Đứng yên'};
+  function resize(){const dpr=Math.max(1,Math.min(2,window.devicePixelRatio||1)),w=desk.clientWidth,h=desk.clientHeight;canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);canvas.style.width=`${w}px`;canvas.style.height=`${h}px`;ctx.setTransform(dpr,0,0,dpr,0,0)}
+  if(window.ResizeObserver)new ResizeObserver(resize).observe(desk);else window.addEventListener('resize',resize);resize();
+  function safeAgent(a={}){
+    const id=String(a.id||uid()),profile=a.profile||XPAI.profile(a.name,id,a.personality);
+    return{id,name:String(a.name||'Stickman').slice(0,32),color:/^#[0-9a-f]{6}$/i.test(a.color||'')?a.color:'#202020',personality:profile.personality||a.personality||'Curious',profile,
+      state:a.state||'Idle',action:action(a.action),goal:String(a.goal||'Explore the desktop').slice(0,120),
+      energy:Number.isFinite(a.energy)?clamp(a.energy,0,1):.8,happiness:Number.isFinite(a.happiness)?clamp(a.happiness,0,1):.6,
+      needs:XPAI.normalizeNeeds(a.needs),emotion:a.emotion||'calm',goals:Array.isArray(a.goals)?a.goals.slice(0,30):[],repetition:Number.isFinite(a.repetition)?a.repetition:0,previousAction:action(a.previousAction||'idle'),
+      x:Number.isFinite(a.x)?a.x:80+Math.random()*Math.max(80,desk.clientWidth-160),y:Number.isFinite(a.y)?a.y:desk.clientHeight-8,vx:Number.isFinite(a.vx)?a.vx:0,vy:Number.isFinite(a.vy)?a.vy:0,
+      facing:a.facing===-1?-1:1,follow:!!a.follow,stay:!!a.stay,createdAt:a.createdAt||Date.now(),cloudOwnerId:a.cloudOwnerId||null,relationships:a.relationships&&typeof a.relationships==='object'?a.relationships:{},userAffinity:Number.isFinite(a.userAffinity)?a.userAffinity:0,
+      memoryCount:Number.isFinite(a.memoryCount)?a.memoryCount:0,lastActionAt:a.lastActionAt||0,lastEventAt:a.lastEventAt||0,lastDrawingAt:a.lastDrawingAt||0,lastAnimationAt:a.lastAnimationAt||0,memorySnapshot:Array.isArray(a.memorySnapshot)?a.memorySnapshot.slice(-180):[],cooldowns:a.cooldowns&&typeof a.cooldowns==='object'?a.cooldowns:{},bubble:'',bubbleUntil:0,poseTime:0,goalX:Number.isFinite(a.goalX)?a.goalX:null,actionStartedAt:a.actionStartedAt||Date.now(),visitedObjects:Array.isArray(a.visitedObjects)?a.visitedObjects.slice(-60):[],autonomy:a.autonomy!==false};
+  }
+  async function persist(agent){try{const {bubble,bubbleUntil,poseTime,memorySnapshot,...value}=agent;await XPStorage.saveCharacter({...value,updatedAt:Date.now()})}catch(error){console.warn('Không thể lưu stickman',error)}}
+  async function addMemory(agent,message,kind='event',importance=.35,metadata={}){
+    const content=String(message).slice(0,280),record={id:uid(),characterId:agent.id,text:content,kind:String(kind).slice(0,40),importance:clamp(importance,0,1),confidence:clamp(metadata.confidence??.8,0,1),metadata:{...metadata},at:Date.now(),createdAt:Date.now()};
+    try{
+      const current=await XPStorage.getMemories(agent.id);const duplicate=current.find(m=>m.text===content&&Date.now()-(m.at||0)<120000);
+      if(duplicate)return duplicate;
+      await XPStorage.addMemory(record);agent.memorySnapshot=[...(agent.memorySnapshot||current),record].slice(-180);const all=[...current,record];
+      if(all.length>180){all.sort((a,b)=>((a.importance||.2)*.7+(a.confidence||.5)*.2+(1-Math.min(1,(Date.now()-(a.at||0))/(45*86400000)))*.1)-((b.importance||.2)*.7+(b.confidence||.5)*.2+(1-Math.min(1,(Date.now()-(b.at||0))/(45*86400000)))*.1));for(const old of all.slice(0,all.length-180))await XPStorage.deleteMemory(old.id)}
+      agent.memoryCount=Math.min(all.length,180);await persist(agent);XPBus.emit('stickman:memory',{id:agent.id,name:agent.name,text:content,kind});return record;
+    }catch(error){console.warn('Memory storage error',error);return null}
+  }
+  function bubble(agent,message,duration=2300){agent.bubble=String(message).slice(0,80);agent.bubbleUntil=Date.now()+duration}
+  function setAction(agent,next){
+    const normalized=action(next);if(agent.action===normalized)return;
+    agent.action=normalized;agent.state=stateNames[normalized]||normalized;agent.lastActionAt=Date.now();agent.actionStartedAt=Date.now();
+    agent.goal=({observe:'Quan sát hoạt động trên desktop',explore:'Khám phá một vùng desktop mới',socialize:'Tìm một người bạn để trò chuyện',play:'Chơi một trò vui',create:'Tạo một tác phẩm mới',rest:'Nạp lại năng lượng',follow:'Theo dõi con trỏ mô phỏng',think:'Suy nghĩ về những sự kiện gần đây',wave:'Chào người dùng',draw:'Tự vẽ một hình mới',climb:'Khám phá cạnh cửa sổ',celebrate:'Chia sẻ niềm vui'})[normalized]||`Thực hiện: ${stateNames[normalized]||normalized}`;
+    XPBus.emit('stickman:action',{id:agent.id,name:agent.name,action:normalized,state:agent.state});
+  }
+  function addParticle(x,y,color='#ffd45c',count=5){for(let i=0;i<count;i++)particles.push({x,y,vx:(Math.random()-.5)*2.6,vy:-Math.random()*2.4,life:1,color})}
+  function nearbyAgent(agent){let best=null,distance=Infinity;for(const other of agents.values()){if(other.id===agent.id)continue;const d=Math.hypot(other.x-agent.x,other.y-agent.y);if(d<distance){distance=d;best=other}}return best&&distance<260?{agent:best,distance}:null}
+  function nearestWorld(agent){const objects=window.XPPerception?.near(agent.x,agent.y,260)||[];return objects.sort((a,b)=>Math.hypot(a.bounds.x+a.bounds.width/2-agent.x,a.bounds.y+a.bounds.height/2-agent.y)-Math.hypot(b.bounds.x+b.bounds.width/2-agent.x,b.bounds.y+b.bounds.height/2-agent.y))[0]||null}
+  async function createArtwork(agent){
+    if(Date.now()-(agent.cooldowns.artwork||0)<45000)return;
+    agent.cooldowns.artwork=Date.now();
+    try{const drawing=await XPDrawing.generateAndSave(agent);agent.lastDrawingAt=Date.now();bubble(agent,'Mình vừa tạo một bức tranh!');addParticle(agent.x,agent.y-42,agent.color,9);await addMemory(agent,`Đã hoàn thành tác phẩm “${drawing.name}”.`,'creative',.9,{drawingId:drawing.id});XPBus.emit('desktop:event',{kind:'stickman-created-artwork',id:agent.id,drawingId:drawing.id});}
+    catch(error){console.warn('Không thể tạo tác phẩm',error);bubble(agent,'Ý tưởng chưa thành hình…')}
+  }
+  async function createAnimation(agent){
+    if(Date.now()-(agent.cooldowns.animation||0)<90000)return;
+    agent.cooldowns.animation=Date.now();agent.lastAnimationAt=Date.now();
+    try{
+      const samples=XPAnimation.sampleProjects(),index=Math.abs((agent.profile.seed||1)+Math.floor(Date.now()/120000))%samples.length,sample=samples[index];
+      const project=XPAnimation.validateProject({...sample,id:undefined,name:`${agent.name} — ${sample.name}`,characterId:agent.id,metadata:{generated:true,createdBy:'autonomous-stickman',poseSource:sample.name}});
+      await XPAnimation.save(project);bubble(agent,'Mình vừa tạo một hoạt ảnh mới!');addParticle(agent.x,agent.y-42,'#8bd4ff',10);await addMemory(agent,`Đã tạo hoạt ảnh “${project.name}”.`,'creative',.94,{animationId:project.id});
+      XPBus.emit('desktop:event',{kind:'stickman-created-animation',id:agent.id,animationId:project.id});
+    }catch(error){console.warn('Không thể tạo hoạt ảnh',error);bubble(agent,'Hoạt ảnh chưa hoàn thành…')}
+  }
+  async function socialMeet(agent,other){
+    if(!other)return;
+    const before=Number(agent.relationships[other.id]||0);agent.relationships[other.id]=clamp(before+1,0,100);other.relationships[agent.id]=clamp(Number(other.relationships[agent.id]||0)+1,0,100);
+    agent.vx*=.25;other.vx*=.25;bubble(agent,`Chào ${other.name}!`);bubble(other,`Chào ${agent.name}!`);addParticle((agent.x+other.x)/2,Math.min(agent.y,other.y)-36,'#ffe17b',8);
+    await addMemory(agent,`Gặp và chào ${other.name}.`,'social',.72,{relatedCharacter:other.id});await addMemory(other,`Gặp và chào ${agent.name}.`,'social',.72,{relatedCharacter:agent.id});
+    agent.cooldowns.social=Date.now()+9000;other.cooldowns.social=Date.now()+9000;
+  }
+  function execute(agent,decision,context,now){
+    if(agent.follow&&context.pointer.active)decision='follow';if(agent.stay&&['explore','walk','run','follow'].includes(decision))decision='observe';
+    setAction(agent,decision);
+    if(decision==='explore'||decision==='walk'||decision==='run'||decision==='sneak'){
+      if(agent.goalX===null||Math.abs(agent.x-agent.goalX)<20){agent.goalX=20+Math.random()*Math.max(40,desk.clientWidth-40);agent.visitedObjects=agent.visitedObjects.slice(-60)}
+      const speed=decision==='run'?1.25:decision==='sneak'?.24:.62;agent.vx+=Math.sign(agent.goalX-agent.x)*speed;agent.facing=Math.sign(agent.goalX-agent.x)||agent.facing;
+    }else if(decision==='follow'){
+      if(context.pointer.active){agent.vx+=(context.pointer.x-agent.x)*.0018;agent.facing=Math.sign(context.pointer.x-agent.x)||agent.facing}
+      else if(context.pointer.lastKnown){agent.goalX=context.pointer.lastKnown.x;agent.vx+=Math.sign(agent.goalX-agent.x)*.28}
+    }else if(decision==='avoid'){
+      const dx=agent.x-context.pointer.x;agent.vx+=Math.sign(dx||agent.facing)*.85;agent.facing=Math.sign(dx)||agent.facing;
+    }else if(decision==='jump'){
+      if(Math.abs(agent.vy)<.5)agent.vy=-7.2;
+    }else if(decision==='wave'){
+      if(now-agent.lastEventAt>7000){bubble(agent,'Xin chào!');agent.lastEventAt=now;addMemory(agent,'Đã chào người dùng.','interaction',.62)}
+    }else if(decision==='think')bubble(agent,'Đang suy nghĩ…',1000);
+    else if(decision==='rest'||decision==='sleep'){
+      agent.vx*=.65;if(agent.needs.energy>.86&&decision==='sleep')bubble(agent,'Zzz…',1400);
+    }else if(decision==='socialize'){
+      const meeting=nearbyAgent(agent);if(meeting&&meeting.distance<62&&now>(agent.cooldowns.social||0))socialMeet(agent,meeting.agent);else if(meeting){agent.goalX=meeting.agent.x;agent.vx+=Math.sign(meeting.agent.x-agent.x)*.48}
+      else if(now-(agent.cooldowns.social||0)>5000)bubble(agent,'Đang tìm bạn…',1100);
+    }else if(decision==='create'){
+      if(context.animationNeeded&&(agent.profile.traits.creativity||0)>.65)createAnimation(agent);else createArtwork(agent);agent.vx*=.5;
+    }else if(decision==='draw'){
+      createArtwork(agent);agent.vx*=.5;
+    }else if(decision==='play'){
+      if(Math.abs(agent.vy)<.5)agent.vy=-5.3;addParticle(agent.x,agent.y-30,'#8bd4ff',3);
+    }else if(decision==='startled'){
+      agent.vx+=agent.facing*-1*1.2;agent.vy=-3;bubble(agent,'Ồ!');
+    }else if(decision==='climb'){
+      const target=nearestWorld(agent);if(target?.type==='window'){agent.goalX=target.bounds.x+target.bounds.width/2;agent.vx+=Math.sign(agent.goalX-agent.x)*.4;agent.vy=-.22}else setAction(agent,'explore');
+    }else if(decision==='interact'){
+      const target=nearestWorld(agent);if(target?.type==='icon'){bubble(agent,'Có gì bên trong nhỉ?');XPInteraction.openApp(target.id.split(':')[1])}else if(target?.type==='tab'){setAction(agent,'tab-prank');bubble(agent,'Để xem tab này rung thế nào!');XPInteraction.playTabPrank(target.id.slice(4))}
+    }
+    const abilities=agent.profile.abilities||[];
+    if(now-(agent.cooldowns.ability||0)>24000&&agent.energy>.48&&abilities.length&&Math.random()<.06){activateAbility(agent,abilities[(now>>4)%abilities.length]);agent.cooldowns.ability=now}
+  }
+  function activateAbility(agent,ability){
+    const effects={blink:()=>{agent.x=clamp(agent.x+(agent.facing||1)*72,20,desk.clientWidth-20);bubble(agent,'Shadow Step!')},echo:()=>{setAction(agent,'wave');bubble(agent,'Echo Motion!')},bounce:()=>{agent.vy=-8;bubble(agent,'Energy Bounce!')},float:()=>{agent.vy=-5;bubble(agent,'Gravity Shift!')},draw:()=>createArtwork(agent),speed:()=>{agent.vx+=(agent.facing||1)*4;bubble(agent,'Super Speed!')},spark:()=>{addParticle(agent.x,agent.y-28,'#ffe066',12);bubble(agent,'Spark Burst!')},build:()=>{addParticle(agent.x,agent.y-15,'#7fd4ff',8);bubble(agent,'Tiny Builder!')}};
+    effects[ability.effect]?.();addMemory(agent,`Đã sử dụng năng lực ${ability.name}.`,'ability',.65);
+  }
+  function plan(now){
+    const pointer=window.XPPerception?.pointer()||{active:false,x:0,y:0,movingAt:0},objects=window.XPPerception?.scan()||[];
+    for(const agent of agents.values()){
+      agent.needs=XPAI.decayNeeds(agent.needs,1000,agent.action);agent.energy=agent.needs.energy;
+      const near=nearbyAgent(agent),world=nearestWorld(agent),recent=window.XPPerception?.events().at(-1),memoryCue=world?.type||recent?.type||'';
+      const recalled=memoryCue?XPAI.retrieveMemories(agent.memorySnapshot||[],{query:memoryCue,event:recent?.type||''}):[];agent.recalledMemoryIds=recalled.slice(0,3).map(memory=>memory.id);
+      const pointerNear=pointer.active&&Math.hypot(pointer.x-agent.x,pointer.y-agent.y)<190;
+      const context={pointer, pointerNear,userActive:Date.now()-pointer.movingAt<5000,nearCharacter:!!near,newFriend:!!near&&!(agent.relationships[near.agent.id]>0),newObject:!!world&&world.id!==agent.lastWorldObject,
+        unvisitedIcon:objects.some(o=>o.type==='icon'&&!agent.visitedObjects.includes(o.id)),paintOpen:[...document.querySelectorAll('.win[data-app-id="paint"]')].length>0,
+        memoryMatch:(!!recent&&now-recent.at<60000)||recalled.length>0,artworkNeeded:now-(agent.lastDrawingAt||0)>120000,animationNeeded:now-(agent.lastAnimationAt||0)>180000};
+      agent.emotion=XPAI.emotion(agent,{...context,surprise:recent&&now-recent.at<700&&recent.type==='window-open'});
+      if(world&&world.id!==agent.lastWorldObject){agent.lastWorldObject=world.id;if(world.type==='icon')agent.visitedObjects.push(world.id)}
+      if(agent.autonomy){
+        agent.repetition=agent.previousAction===agent.action?agent.repetition+1:0;agent.previousAction=agent.action;
+        const decision=XPAI.decide(agent,context);execute(agent,decision,context,now);
+      }
+    }
+  }
+  function physics(dt){
+    const floor=desk.clientHeight-8;
+    for(const agent of agents.values()){
+      const motion=window.XPWasm?.integrateMotion({x:agent.x,y:agent.y,vx:agent.vx,vy:agent.vy,dt,floor,width:desk.clientWidth,stay:agent.stay,wandering:['walk','run','explore','follow','sneak','escape'].includes(agent.action),goalX:agent.goalX??agent.x,facing:agent.facing})||(()=>{
+        let vx=agent.vx,vy=agent.vy,x=agent.x,y=agent.y,facing=agent.facing||1;
+        vx*=Math.pow(agent.stay?.225:.90,dt/16.67);vy+=.00055*dt;x+=vx*dt/16.67;y+=vy*dt/16.67;
+        if(y>floor){y=floor;vy=0}const maxX=Math.max(desk.clientWidth-20,20);
+        if(x<20){x=20;vx=Math.abs(vx);facing=1}if(x>maxX){x=maxX;vx=-Math.abs(vx);facing=-1}
+        return{x,y,vx,vy,facing};
+      })();
+      Object.assign(agent,motion);
+      if(agent.y>=floor){if(agent.vy>1&&agent.action==='fall')setAction(agent,'landing');agent.y=floor;agent.vy=0;if(agent.action==='landing'&&Date.now()-agent.actionStartedAt>400)setAction(agent,'idle')}
+      agent.poseTime+=dt;
+      if(agent.action==='jump'&&Math.abs(agent.vy)<.1&&agent.y>=floor-1)setAction(agent,'landing');
+    }
+  }
+  function render(now){
+    ctx.clearRect(0,0,desk.clientWidth,desk.clientHeight);
+    for(const agent of agents.values()){
+      const walking=['walk','run','explore','follow','sneak','escape'].includes(agent.action),pose=window.XPAnimation?.poseFor(agent.action,agent.poseTime)||{armL:[0,16],armR:[0,16],legL:[0,20],legR:[0,20],bob:Math.sin(agent.poseTime/250)};
+      const x=agent.x,y=agent.y+(walking?Math.sin(agent.poseTime/105)*.8:0),facing=agent.facing||1;
+      ctx.save();ctx.translate(x,y);ctx.scale(facing,1);window.XPAnimation?.draw(ctx,0,0,pose,agent.color,1);ctx.restore();
+      ctx.font='11px Tahoma';ctx.textAlign='center';ctx.lineWidth=3;ctx.strokeStyle='rgba(0,0,0,.62)';ctx.strokeText(agent.name,x,y-54);ctx.fillStyle='#fff';ctx.fillText(agent.name,x,y-54);
+      if(agent.bubble&&now<agent.bubbleUntil){const bw=Math.max(54,ctx.measureText(agent.bubble).width+14),bx=clamp(x-bw/2,4,desk.clientWidth-bw-4),by=Math.max(5,y-87);ctx.fillStyle='#fffde8';ctx.strokeStyle='#344e7a';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(bx,by,bw,23,5);ctx.fill();ctx.stroke();ctx.fillStyle='#172b4d';ctx.font='11px Tahoma';ctx.fillText(agent.bubble,bx+bw/2,by+15)}
+    }
+    for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.life-=.025;p.x+=p.vx;p.y+=p.vy;p.vy+=.04;if(p.life<=0){particles.splice(i,1);continue}ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,2+2*(1-p.life),0,Math.PI*2);ctx.fill();ctx.globalAlpha=1}
+  }
+  function loop(now){
+    if(!running||!visible||document.hidden)return;
+    if(!lastFrame)lastFrame=now;const dt=Math.min(40,Math.max(0,now-lastFrame));lastFrame=now;
+    if(agents.size){physics(dt);if(now-lastAI>1300){plan(now);lastAI=now}render(now);if(now-lastSave>5000){for(const agent of agents.values())persist(agent);lastSave=now}animationFrame=requestAnimationFrame(loop)}
+    else{ctx.clearRect(0,0,desk.clientWidth,desk.clientHeight);running=false;animationFrame=0}
+  }
+  function ensureLoop(){if(running||!agents.size||document.hidden)return;running=true;lastFrame=0;animationFrame=requestAnimationFrame(loop)}
+  document.addEventListener('visibilitychange',()=>{visible=!document.hidden;if(!visible&&animationFrame)cancelAnimationFrame(animationFrame);else if(visible){running=false;ensureLoop()}});
+  window.addEventListener('pagehide',()=>{for(const a of agents.values())persist(a)});
+  desk.addEventListener('click',event=>{const icon=event.target.closest('.ic');if(icon)addMemoryForAll(`Người dùng chọn biểu tượng ${icon.querySelector('.icon-name')?.textContent||icon.dataset.appId}.`,'observation',.2)});
+  function addMemoryForAll(message,kind,importance){for(const agent of agents.values())addMemory(agent,message,kind,importance)}
+  XPBus.on('desktop:event',event=>{
+    for(const agent of agents.values()){
+      if(event.kind==='window-open')addMemory(agent,`Người dùng mở ứng dụng ${event.title||event.appId}.`,'observation',.3);
+      else if(event.kind==='window-close')addMemory(agent,`Người dùng đóng ứng dụng ${event.title||event.appId}.`,'observation',.22);
+      else if(event.kind==='paint-draw')addMemory(agent,'Một nét vẽ mới xuất hiện trong Paint.','observation',.32);
+      else if(event.kind==='stickman-created'&&event.id!==agent.id){agent.relationships[event.id]=(agent.relationships[event.id]||0)+1;addMemory(agent,`Một stickman mới xuất hiện: ${event.name}.`,'social',.48,{relatedCharacter:event.id})}
+    }
+  });
+  async function load(){try{await window.XPWasm?.ready;const saved=await XPStorage.getCharacters();for(const value of saved){const agent=safeAgent(value);try{agent.memorySnapshot=(await XPStorage.getMemories(agent.id)).slice(-180)}catch{}agents.set(agent.id,agent)}window.XPPerception?.scan();ensureLoop()}catch(error){console.warn('Không thể phục hồi stickman',error)}}
+  async function spawn(input={}){
+    await window.XPWasm?.ready;
+    const id=uid(),name=String(input.name||'Stickman').trim().slice(0,32)||'Stickman',personality=input.personality||'Curious',profile=XPAI.profile(name,id,personality);
+    const agent=safeAgent({id,name,color:input.color||'#202020',profile,personality,state:'Idle',action:'idle',x:60+Math.random()*Math.max(50,desk.clientWidth-120),y:desk.clientHeight-8});
+    agent.memorySnapshot=[];agents.set(id,agent);ensureLoop();await persist(agent);await addMemory(agent,`Đã tạo nhân vật ${name}.`,'milestone',.9);XPBus.emit('stickman:created',{id,name,personality});XPBus.emit('desktop:event',{kind:'stickman-created',id,name});return agent;
+  }
+  function findHit(clientX,clientY){const r=desk.getBoundingClientRect(),x=clientX-r.left,y=clientY-r.top;for(const agent of [...agents.values()].reverse())if(Math.hypot(x-agent.x,y-(agent.y-25))<26)return agent;return null}
+  document.addEventListener('dblclick',event=>{const agent=findHit(event.clientX,event.clientY);if(!agent)return;event.preventDefault();event.stopPropagation();window.showStickmanProfile?.(agent.id)},true);
+  async function command(id,commandName){
+    const agent=agents.get(id);if(!agent)return false;const commandValue=String(commandName||'').toLowerCase();
+    if(commandValue==='follow'){agent.follow=true;agent.stay=false;setAction(agent,'follow');bubble(agent,'Mình đi theo nhé!')}
+    else if(commandValue==='stay'){agent.follow=false;agent.stay=true;agent.vx=0;setAction(agent,'observe');bubble(agent,'Mình ở đây nhé!')}
+    else if(commandValue==='talk'){setAction(agent,'talk');bubble(agent,'Chào bạn! Mình đang ở đây.');agent.userAffinity=clamp(agent.userAffinity+1,0,100);await addMemory(agent,'Người dùng bắt đầu trò chuyện.','interaction',.6)}
+    else if(commandValue==='interact'){setAction(agent,'interact');agent.userAffinity=clamp(agent.userAffinity+2,0,100);const target=nearestWorld(agent);if(target?.type==='icon')window.XPInteraction?.openApp(target.id.split(':')[1]);else if(target?.type==='tab')window.XPInteraction?.highlightTab(target.id.slice(4));bubble(agent,'Mình đang tương tác!');await addMemory(agent,'Đã tương tác với một đối tượng desktop.','interaction',.6)}
+    else if(commandValue==='wave'||commandValue==='animate'){setAction(agent,'wave');bubble(agent,'Xin chào!')}
+    else if(commandValue==='rest'){setAction(agent,'rest');agent.needs.energy=clamp(agent.needs.energy+.12,0,1)}
+    else if(commandValue==='play'){setAction(agent,'play');agent.vy=-5.5}
+    else if(commandValue==='create'||commandValue==='draw'){setAction(agent,'create');await createArtwork(agent)}
+    else return false;
+    await persist(agent);ensureLoop();return true;
+  }
+  async function rename(id){const agent=agents.get(id);if(!agent)return;const name=prompt('Tên nhân vật:',agent.name);if(!name?.trim())return;agent.name=name.trim().slice(0,32);agent.profile=XPAI.profile(agent.name,agent.id,agent.personality,agent.profile.traits);await persist(agent);await addMemory(agent,`Tên nhân vật đã đổi thành ${agent.name}.`,'milestone',.75)}
+  async function duplicate(id){const a=agents.get(id);if(!a)return;return spawn({name:`${a.name} Copy`,color:a.color,personality:a.personality})}
+  async function remove(id){const agent=agents.get(id);if(!agent)return false;if(!confirm(`Xóa stickman ${agent.name} và toàn bộ ký ức của nhân vật này?`))return false;agents.delete(id);await XPStorage.deleteCharacter(id);await XPStorage.clearMemories(id);if(!agents.size&&animationFrame){cancelAnimationFrame(animationFrame);animationFrame=0;running=false;ctx.clearRect(0,0,desk.clientWidth,desk.clientHeight)}return true}
+  async function remember(id,message='Người dùng yêu cầu ghi nhớ một sự kiện.'){const agent=agents.get(id);if(agent)await addMemory(agent,message,'important',1)}
+  async function showMemory(id){
+    const agent=agents.get(id);if(!agent)return;const memories=(await XPStorage.getMemories(id)).sort((a,b)=>b.at-a.at),body=document.createElement('div');body.className='memory-view';
+    const title=document.createElement('h3');title.textContent=`Ký ức của ${agent.name}`;body.append(title);const list=document.createElement('div');list.className='memory-list';
+    memories.slice(0,150).forEach(memory=>{const row=document.createElement('p');row.textContent=`${new Date(memory.at).toLocaleString('vi-VN')} · ${memory.text}`;list.append(row)});body.append(list);
+    const actions=document.createElement('div');actions.className='bar';const clear=document.createElement('button');clear.textContent='Xóa ký ức';clear.onclick=async()=>{if(confirm('Xóa toàn bộ ký ức của nhân vật?')){await XPStorage.clearMemories(id);agent.memoryCount=0;await persist(agent);list.replaceChildren()}};
+    const exportBtn=document.createElement('button');exportBtn.textContent='Xuất JSON';exportBtn.onclick=()=>downloadJSON({character:agent,memories},`${agent.name}-memory.json`);actions.append(clear,exportBtn);body.append(actions);XPWM.create({title:`Memory — ${agent.name}`,icon:'🧠',width:480,height:420,appId:'memory',build:winBody=>winBody.append(body)});
+  }
+  function downloadJSON(value,filename){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+  function showProfile(id){const agent=agents.get(id);if(agent)window.showStickmanProfile?.(id)}
+  window.XPStickman=Object.freeze({spawn,load,list:()=>[...agents.values()],get:id=>agents.get(id),findHit,command,rename,duplicate,remove,remember,showMemory,showProfile,
+    setAutonomy:(id,enabled)=>{const a=agents.get(id);if(a){a.autonomy=!!enabled;persist(a)}},
+    exportAll:async()=>{const values=[];for(const agent of agents.values())values.push({character:agent,memories:await XPStorage.getMemories(agent.id)});downloadJSON(values,'xp-stickmen-backup.json')},
+    importAll:async values=>{for(const item of values||[]){if(!item.character?.id)continue;const agent=safeAgent(item.character);agents.set(agent.id,agent);await persist(agent);for(const memory of item.memories||[])await XPStorage.addMemory({...memory,characterId:agent.id})}ensureLoop()}
+  });
+  load();
+})();

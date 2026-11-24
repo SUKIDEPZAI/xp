@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#1673df"/><stop offset=".47" stop-color="#73b7ef"/><stop offset=".78" stop-color="#c9e7fb"/><stop offset="1" stop-color="#f1f8ff"/></linearGradient>
+    <linearGradient id="hill1" x2="0" y2="1"><stop stop-color="#b6e469"/><stop offset=".25" stop-color="#70bd35"/><stop offset=".72" stop-color="#3e941d"/><stop offset="1" stop-color="#2f7917"/></linearGradient>
+    <linearGradient id="hill2" x2="0" y2="1"><stop stop-color="#79bd35"/><stop offset=".5" stop-color="#367f1b"/><stop offset="1" stop-color="#246612"/></linearGradient>
+    <linearGradient id="foreground" x2="0" y2="1"><stop stop-color="#4d9c22"/><stop offset=".45" stop-color="#2b7d14"/><stop offset="1" stop-color="#1b5c0c"/></linearGradient>
+    <filter id="cloudBlur" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="9"/></filter>
+    <filter id="cloudSoft" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="18"/></filter>
+    <filter id="grassSoft"><feGaussianBlur stdDeviation="2"/></filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#sky)"/>
+  <g fill="#fff" opacity=".9" filter="url(#cloudSoft)">
+    <ellipse cx="130" cy="80" rx="180" ry="34"/><ellipse cx="360" cy="120" rx="128" ry="27"/><ellipse cx="690" cy="68" rx="210" ry="28"/>
+    <ellipse cx="1070" cy="120" rx="190" ry="34"/><ellipse cx="1420" cy="70" rx="250" ry="45"/><ellipse cx="1500" cy="240" rx="165" ry="25"/>
+    <ellipse cx="410" cy="280" rx="140" ry="21"/><ellipse cx="880" cy="245" rx="170" ry="25"/>
+  </g>
+  <g fill="#fff" opacity=".96" filter="url(#cloudBlur)">
+    <path d="M35 220c15-40 57-54 95-39 24-62 105-69 145-28 47-25 109 5 116 52 40 7 57 34 42 59H34c-26-14-25-32 1-44z"/>
+    <path d="M535 168c20-35 71-45 105-23 23-55 95-68 137-27 49-30 111-2 120 46 48 8 66 41 45 69H529c-25-18-21-48 6-65z"/>
+    <path d="M1110 315c18-42 69-57 111-38 25-67 113-76 157-29 51-31 122-1 130 51 48 9 68 44 44 72h-449c-31-17-26-40 7-56z"/>
+    <path d="M1280 150c19-33 57-45 91-28 24-48 86-55 120-20 40-22 92 0 101 40 35 7 47 32 30 54h-352c-23-15-17-35 10-46z"/>
+  </g>
+  <g fill="#fff" opacity=".55">
+    <ellipse cx="210" cy="212" rx="70" ry="6"/><ellipse cx="700" cy="195" rx="66" ry="7"/><ellipse cx="1320" cy="342" rx="100" ry="7"/>
+  </g>
+  <path d="M0 575C175 506 338 483 510 493c174 10 295 44 470 62 210 22 409 19 620-92v437H0z" fill="url(#hill1)"/>
+  <path d="M0 680c225-85 446-105 650-53 210 53 380 92 575 53 141-28 255-73 375-124v344H0z" fill="url(#hill2)" opacity=".92"/>
+  <path d="M0 768c250-81 478-82 694-35 241 53 453 87 650 20 104-35 184-63 256-85v232H0z" fill="url(#foreground)"/>
+  <g fill="none" stroke-linecap="round" opacity=".26" filter="url(#grassSoft)">
+    <path d="M50 786l8-17m12 19 9-23m30 7 6-14m80 20 8-18m42 26 8-16m61 7 7-19m41 27 8-17m68 13 6-19m52 28 8-20m85 15 7-19m44 25 10-23m77 17 7-18m58 23 8-19m72 12 9-22m49 24 7-18m60 22 9-20m67 12 8-17m72 24 7-20m78 21 9-19m62 25 7-17m79 17 8-21m76 27 8-18" stroke="#d2f59b" stroke-width="2"/>
+  </g>
+  <g fill="#d5ed76" opacity=".78"><circle cx="138" cy="815" r="2"/><circle cx="294" cy="742" r="2"/><circle cx="501" cy="837" r="2"/><circle cx="805" cy="780" r="2"/><circle cx="1034" cy="849" r="2"/><circle cx="1288" cy="757" r="2"/><circle cx="1501" cy="830" r="2"/></g>
+</svg>

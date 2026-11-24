@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; base-uri 'self'; object-src 'none'; frame-src 'self' https: http:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self">
+<meta name="theme-color" content="#245edb">
+<title>Windows XP — Living Desktop</title>
+<link rel="stylesheet" href="desktop.css">
+</head>
+<body>
+<div id="desk" aria-label="Windows XP Desktop"><div id="icons"></div></div>
+<div id="sm" hidden role="menu" aria-label="Start Menu">
+  <div class="sh"><div class="start-avatar" aria-hidden="true"><svg viewBox="0 0 32 32"><circle cx="16" cy="11" r="7" fill="#f1c6a6"/><path d="M5 30c1-8 5-12 11-12s10 4 11 12" fill="#335b9d" stroke="#fff" stroke-width="1.5"/></svg></div><div><strong>Administrator</strong><small>Windows XP Living Desktop</small></div></div>
+  <div class="sc"><div class="l" aria-label="Pinned applications"></div><div class="r" aria-label="System locations"></div></div>
+  <div class="sf"><button id="logoff" type="button"> <span class="sf-icon">↪</span> Log Off</button><button id="offb" type="button"><span class="sf-icon">⏻</span> Turn Off Computer</button></div>
+</div>
+<div id="task">
+  <button id="st" type="button" aria-label="Start Menu"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 3c3-2 5 1 7 0v5c-2 1-4-2-7 0z" fill="#f25022"/><path d="M9 3c2 1 4-1 6-1v5c-2 0-4 2-6 1z" fill="#7fba00"/><path d="M1 9c3-2 5 1 7 0v5c-2 1-4-2-7 0z" fill="#00a4ef"/><path d="M9 9c2 1 4-1 6-1v5c-2 0-4 2-6 1z" fill="#ffb900"/></svg> start</button>
+  <div id="quick-launch">
+    <button type="button" data-launch="ie" title="Internet Explorer" aria-label="Internet Explorer"></button>
+    <button type="button" data-launch="paint" title="Paint" aria-label="Paint"></button>
+    <button type="button" data-launch="note" title="Notepad" aria-label="Notepad"></button>
+  </div>
+  <div id="tasks" aria-label="Open windows"></div>
+  <div id="sys-tray"><span title="Network connected" class="tray-network"><svg viewBox="0 0 16 16"><path d="M1 5q7-6 14 0M3 8q5-4 10 0M6 11q2-2 4 0M8 14h.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span title="Volume" class="tray-volume"><svg viewBox="0 0 16 16"><path d="M2 6h3l4-3v10l-4-3H2zM11 6q3 2 0 4M12 4q5 4 0 8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+  <div id="clk" aria-label="System clock"></div>
+</div>
+<div id="off" role="button" tabindex="0">Windows is shut down. Click to restart.</div>
+<script src="host-adapter.js"></script>
+<script type="module" src="modules/wasm-adapter.js"></script>
+<script type="module" src="modules/event-bus.js"></script>
+<script type="module" src="modules/action-registry.js"></script>
+<script type="module" src="modules/storage-manager.js"></script>
+<script type="module" src="modules/ai-engine.js"></script>
+<script type="module" src="modules/window-manager.js"></script>
+<script type="module" src="modules/perception.js"></script>
+<script type="module" src="modules/drawing-engine.js"></script>
+<script type="module" src="modules/animation-engine.js"></script>
+<script type="module" src="modules/interaction-api.js"></script>
+<script type="module" src="modules/animation-studio.js"></script>
+<script type="module" src="modules/context-menu.js"></script>
+<script type="module" src="modules/stickman-runtime.js"></script>
+<script type="module" src="modules/cloud-sync.js"></script>
+<script type="module" src="desktop.js"></script>
+</body>
+</html>
