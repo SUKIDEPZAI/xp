@@ -1,6 +1,6 @@
 {
   "name": "windows-xp-living-desktop",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "description": "Windows XP living desktop with autonomous stickmen, vector/animation studio, and Neon cloud sync",
   "main": "main.js",

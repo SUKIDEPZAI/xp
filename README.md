@@ -1,4 +1,4 @@
-# Windows XP Living Desktop — Autonomous Stickman Ultimate (v0.4.0)
+# Windows XP Living Desktop — Autonomous Stickman Ultimate (v0.4.2)
 
 A browser-first Windows XP Luna desktop simulation with local applications, autonomous 2D stickmen, a vector drawing engine, a keyframe Animation Studio, and an optional same-origin Node.js + Neon PostgreSQL account/sync service. The Electron shell remains available for local desktop use.
 
@@ -86,7 +86,7 @@ Run Rust unit tests with `npm run test:rust`. The web renderer, Canvas, DOM, Ind
 
 ## SnapDeploy deployment
 
-The repository Dockerfile is the production entry point. It builds the Rust/WASM module, installs the production Node dependencies, and runs a single Node 22 service for both the desktop and API.
+The repository Dockerfile is the production entry point and uses exactly two build stages: production Node dependencies, then the Node 22 runtime. To stay within SnapDeploy Small's build-stage limit and memory/disk budget, it does not install Rust or compile WASM during deployment. The browser uses its built-in JavaScript fallback; WASM remains an optional separate build (`npm run build:wasm`) that can be performed outside the constrained container and included in `ui/wasm-core/`.
 
 1. Push this repository (including `Dockerfile`, `server/`, `migrations/`, `scripts/`, `rust-core/`, and `ui/`) to GitHub.
 2. In SnapDeploy, connect the repository and select the deployment branch. Use the repository root as the build context and choose Dockerfile deployment.
@@ -144,5 +144,5 @@ The tests are meaningful source/runtime smoke tests, not proof that every reques
 
 ## SnapDeploy port configuration
 
-This project must listen on an unprivileged container port. Set the SnapDeploy container/listener port to `8080` and use `npm start`. The server binds to `0.0.0.0` and reads the platform-provided `PORT`; it exits early with an actionable message if `PORT` is below `1024` (for example, `80`). Do not configure the Node process to listen on port `80`. Ensure the deployed source is version `0.4.1` or later; startup logs should identify `windows-xp-living-desktop@0.4.1`.
+This project must listen on an unprivileged container port. Set the SnapDeploy container/listener port to `8080` and use `npm start`. The server binds to `0.0.0.0` and reads the platform-provided `PORT`; it exits early with an actionable message if `PORT` is below `1024` (for example, `80`). Do not configure the Node process to listen on port `80`. Ensure the deployed source is version `0.4.2` or later. The image uses two Docker stages, and startup logs should identify `windows-xp-living-desktop@0.4.2`.
 

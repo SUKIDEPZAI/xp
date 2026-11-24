@@ -57,3 +57,12 @@
 - Rust/WASM and Docker paths are configured but remain uncompiled/unbuilt in this environment.
 - SnapDeploy/GitHub are documented deployment targets; no production deployment has been performed.
 - No hosted LLM, real-time multiplayer, remote desktop control, or real-browser-tab manipulation is included.
+
+
+## v0.4.2 — SnapDeploy Small build-stage fix
+
+- Dockerfile reduced from three stages to exactly two (`production-deps`, `production`).
+- Rust/wasm-pack installation and WASM compilation removed from the constrained image build.
+- The application retains its JavaScript fallback when optional WASM artifacts are absent.
+- Production image still installs production Node dependencies and serves the desktop/API on the platform-provided port (default 8080).
+- This source change does not itself verify a remote SnapDeploy build; deploy logs and `/health` still need confirmation.
