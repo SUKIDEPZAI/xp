@@ -9,7 +9,17 @@ const {pingDatabase,closeDatabase}=require('../server/database');
 
 const ROOT=path.resolve(__dirname,'..','ui');
 const PORT=Number.parseInt(process.env.PORT||'8080',10);
-const HOST=process.env.HOST||'0.0.0.0';
+// Containers run as an unprivileged user. Ports below 1024 (notably 80)
+// cannot be bound; configure the platform's container/listener port as 8080.
+if(!Number.isInteger(PORT)||PORT<1024||PORT>65535){
+  console.error(`[startup] Invalid PORT=${process.env.PORT||'(unset)'}. Use an unprivileged port from 1024 to 65535 (recommended: 8080). On SnapDeploy, set the container port to 8080; do not configure port 80.`);
+  process.exit(1);
+}
+// Bind all interfaces so the platform load balancer can reach the container.
+const HOST='0.0.0.0';
+if(process.env.HOST&&process.env.HOST!=='0.0.0.0'){
+  console.warn(`[startup] Ignoring HOST=${process.env.HOST}; binding 0.0.0.0 for container networking.`);
+}
 const MIME={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.gif':'image/gif','.ico':'image/x-icon','.wasm':'application/wasm','.txt':'text/plain; charset=utf-8','.mp3':'audio/mpeg','.mp4':'video/mp4','.webm':'video/webm'};
 function send(res,status,body,type='text/plain; charset=utf-8',extra={}){res.writeHead(status,{'Content-Type':type,'X-Content-Type-Options':'nosniff','Referrer-Policy':'strict-origin-when-cross-origin','X-Frame-Options':'SAMEORIGIN','Cache-Control':'no-store',...extra});res.end(body)}
 const server=http.createServer(async(req,res)=>{

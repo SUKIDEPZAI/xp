@@ -141,3 +141,8 @@ In the environment used to prepare this handoff:
 - Neon migration, account registration/login against a real database, cloud sync across separate accounts/devices, SnapDeploy deployment, and visual browser E2E at the requested viewport sizes: NOT VERIFIED — no live Neon credentials, deployment credentials, browser automation suite, or Docker runtime were available.
 
 The tests are meaningful source/runtime smoke tests, not proof that every requested end-to-end workflow or every viewport has passed. The autonomous action vocabulary is unified, but some advanced states from the full brief (for example full-body grab/drag/push/pull/hang choreography and highly scripted multi-step tab scenes) remain partial rather than finished production animation systems.
+
+## SnapDeploy port configuration
+
+This project must listen on an unprivileged container port. Set the SnapDeploy container/listener port to `8080` and use `npm start`. The server binds to `0.0.0.0` and reads the platform-provided `PORT`; it exits early with an actionable message if `PORT` is below `1024` (for example, `80`). Do not configure the Node process to listen on port `80`. Ensure the deployed source is version `0.4.1` or later; startup logs should identify `windows-xp-living-desktop@0.4.1`.
+
