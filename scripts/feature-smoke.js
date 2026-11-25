@@ -67,8 +67,19 @@ assert.match(svg, /&lt;script&gt;&amp;/);
 assert.doesNotMatch(svg, /<script>/);
 assert.throws(() => drawing.validateDocument({ commands: Array(2001).fill({ op: 'line' }) }));
 
+// Stickman-only appearance stays in a constrained profile model, not in Paint image pixels.
+const appearanceCtx = load('ui/modules/stickman-appearance.js');
+const appearanceApi = appearanceCtx.window.XPStickmanAppearance;
+const appearanceA = appearanceApi.create('char-moss', '#202020', 'Creative');
+const appearanceB = appearanceApi.create('char-moss', '#202020', 'Creative');
+assert.deepEqual(JSON.parse(JSON.stringify(appearanceA)), JSON.parse(JSON.stringify(appearanceB)));
+assert.ok(appearanceApi.HAIR.includes(appearanceA.hairStyle));
+assert.ok(appearanceApi.OUTFITS.includes(appearanceApi.refine(appearanceA, { seed: 'char-moss', personality: 'Creative' }).outfitStyle));
+assert.equal(appearanceApi.normalize({ hairStyle: 'execute-script', accessory: '<img>' }).hairStyle, 'short');
+assert.equal(appearanceApi.normalize({ hairStyle: 'execute-script', accessory: '<img>' }).accessory, 'none');
+
 // Animation projects have bounded frames, supported poses and smooth interpolation.
-const animationCtx = load('ui/modules/animation-engine.js', { window: { XPActions: actions } });
+const animationCtx = load('ui/modules/animation-engine.js', { window: { XPActions: actions, XPStickmanAppearance: appearanceApi } });
 const animation = animationCtx.window.XPAnimation;
 const samples = animation.sampleProjects();
 assert.equal(samples.length, 15);
@@ -78,6 +89,13 @@ const pose = animation.interpolate(project, 6);
 assert.ok(Number.isFinite(pose.x) && Number.isFinite(pose.y));
 assert.equal(animation.validateProject({ frames: [{ at: 0, pose: 'unsupported-action' }] }).frames[0].pose, 'idle');
 assert.throws(() => animation.validateProject({ frames: [] }));
+const generated = animation.generateForCharacter({ id: 'char-moss', name: 'Moss', color: '#1288cc', personality: 'Creative', profile: { appearance: appearanceA } });
+assert.ok(generated.frames.length >= 5, 'character-specific animation should contain multiple generated keyframes');
+assert.equal(generated.metadata.generator, 'personality-motion-v1');
+assert.equal(generated.characterId, 'char-moss');
+assert.equal(generated.metadata.appearance.hairStyle, appearanceA.hairStyle);
+assert.ok(generated.frames.every(frame => actions.isValid(frame.pose)));
+assert.deepEqual(JSON.parse(JSON.stringify(ai.normalizeNeeds({}))), { energy: .82, curiosity: .48, social: .55, entertainment: .58, creativity: .5, comfort: .78, exploration: .42 });
 
 // Security and architecture invariants: constrained interaction, private account data,
 // no renderer-side database credentials, and owner-scoped relational sync.
@@ -88,7 +106,11 @@ assert.doesNotMatch(interaction, /\beval\s*\(/);
 const runtime = read('ui/modules/stickman-runtime.js');
 assert.match(runtime, /XPAI\.retrieveMemories/);
 assert.match(runtime, /async function createAnimation/);
-assert.match(runtime, /XPAnimation\.save/);
+assert.match(runtime, /XPAnimation\.generateAndSave/);
+assert.match(runtime, /function updateGoal/);
+assert.match(runtime, /function updateAppearance/);
+assert.match(runtime, /agent\.profile\?\.appearance/);
+assert.match(runtime, /stickman:loaded/);
 const sync = read('ui/modules/cloud-sync.js');
 assert.match(sync, /enqueueSync/);
 assert.match(sync, /cloudOwnerId/);
@@ -107,6 +129,12 @@ assert.match(api, /last-write-wins-by-updatedAt/);
 assert.match(sync, /updatedAt:timestamp\(remote\.settings\.updatedAt\)/);
 const html = read('ui/index.html');
 assert.doesNotMatch(html, /DATABASE_URL|SESSION_SECRET/);
+assert.match(html, /modules\/stickman-appearance\.js/);
+assert.doesNotMatch(html, /animation-studio\.js/);
+assert.doesNotMatch(read('ui/desktop.js'), /Stickman Animation Studio|My Drawings & Animations|launchApp\?\.\('animation'/);
+assert.match(read('ui/desktop.js'), /Tạo Stickman/);
+assert.match(read('ui/desktop.js'), /Chỉnh ngoại hình trong Paint/);
+assert.doesNotMatch(read('ui/modules/interaction-api.js'), /'animation'|'artwork'/);
 assert.match(html, /wasm-unsafe-eval/);
 assert.match(read('Dockerfile'), /node:22/);
 assert.match(read('migrations/0001_initial.sql'), /CREATE TABLE IF NOT EXISTS character_relationships/);
@@ -116,5 +144,5 @@ console.log('PASS: Node .env loading and injected environment precedence');
 console.log('PASS: canonical action enum and legacy aliases');
 console.log('PASS: personality, utility planning, needs and bounded memory retrieval');
 console.log('PASS: validated vector drawing DSL and SVG escaping');
-console.log('PASS: animation samples, project validation and interpolation');
+console.log('PASS: character appearance profiles, constrained styling, personality-generated animation and interpolation');
 console.log('PASS: constrained interaction, owner-scoped cloud sync, auth and database schema guards');

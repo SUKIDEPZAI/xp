@@ -103,9 +103,7 @@
         item('Copy',()=>paint.copy?.()),
         item('Paste',()=>paint.paste?.()),
         item('Select All',()=>paint.selectAll?.()),
-        item('Create Stickman',()=>paint.createStickman?.()),
-        item('Edit Stickman',()=>window.launchApp?.('stickman')),
-        item('Add Animation',()=>alert('Animation Studio chưa được tích hợp trong bản nền tảng này.')),
+        item('Tạo Stickman trong Paint',()=>paint.createStickman?.()),
         item('Export',()=>paint.export?.())
       ]);return;
     }

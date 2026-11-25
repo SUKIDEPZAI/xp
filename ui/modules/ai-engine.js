@@ -12,6 +12,7 @@
   ];
   const TRAITS=['curiosity','sociability','playfulness','creativity','energy','patience','confidence','empathy','competitiveness','cautiousness'];
   const NEEDS=['energy','curiosity','social','entertainment','creativity','comfort','exploration'];
+  const DEFAULT_NEEDS={energy:.82,curiosity:.48,social:.55,entertainment:.58,creativity:.5,comfort:.78,exploration:.42};
   const clamp=(v,min=0,max=1)=>Math.max(min,Math.min(max,Number.isFinite(v)?v:min));
   const hash=text=>{let h=2166136261;for(let i=0;i<String(text).length;i++){h^=String(text).charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0};
   function rand(seed){let x=seed>>>0;return()=>{x^=x<<13;x^=x>>>17;x^=x<<5;return(x>>>0)/4294967296}}
@@ -24,7 +25,7 @@
     if(existingTraits)for(const t of TRAITS)if(Number.isFinite(existingTraits[t]))base[t]=clamp(existingTraits[t]);
     return{personality:PERSONALITIES.includes(personality)?personality:'Curious',abilities:[ABILITIES[first],ABILITIES[second]],traits:base,seed};
   }
-  function normalizeNeeds(needs={}){return Object.fromEntries(NEEDS.map(k=>[k,clamp(needs[k],0,1)]));}
+  function normalizeNeeds(needs={}){const source=needs&&typeof needs==='object'?needs:{};return Object.fromEntries(NEEDS.map(k=>[k,clamp(Number.isFinite(Number(source[k]))?Number(source[k]):DEFAULT_NEEDS[k],0,1)]));}
   function decayNeeds(needs,dt,action){
     const n=normalizeNeeds(needs),s=Math.max(0,Math.min(dt,60000))/60000;
     n.energy=clamp(n.energy-((action==='run'?.08:action==='explore'?.025:0)*s)+.01*s);
@@ -51,14 +52,14 @@
     const goal=agent.goals?.find(g=>g.status!=='complete'&&g.status!=='cancelled')||null;
     const last=window.XPActions?.normalize(agent.action)||agent.action||'idle',repeat=agent.repetition||0;
     const choices=[
-      ['observe',.12+t.curiosity*.42+n.curiosity*.42+(context.newObject?.38:0)+(context.pointerNear?.12:0)],
+      ['observe',.12+t.curiosity*.42+n.curiosity*.42+(context.newObject?.38:0)+(context.pointerNear?.12:0)+(context.memoryCue?.12:0)],
       ['explore',.1+t.curiosity*.28+t.energy*.2+n.exploration*.5+(context.unvisitedIcon?.28:0)],
-      ['socialize',.06+t.sociability*.38+t.empathy*.18+n.social*.45+(context.nearCharacter?.34:0)+(context.newFriend?.16:0)],
+      ['socialize',.06+t.sociability*.38+t.empathy*.18+n.social*.45+(context.nearCharacter?.34:0)+(context.newFriend?.16:0)+(context.socialMemory?.12:0)],
       ['play',.08+t.playfulness*.4+n.entertainment*.48+(p.personality==='Playful'?.22:0)],
-      ['create',.06+t.creativity*.48+n.creativity*.5+(context.paintOpen?.3:0)+(context.artworkNeeded?.18:0)+(context.animationNeeded?.18:0)],
+      ['create',.06+t.creativity*.48+n.creativity*.5+(context.paintOpen?.3:0)+(context.artworkNeeded?.18:0)+(context.animationNeeded?.18:0)+(context.creativeMemory?.12:0)],
       ['rest',.05+(1-n.energy)*.78+(1-n.comfort)*.18],
       ['follow',.04+t.confidence*.2+(context.pointerNear?.22:0)+(agent.follow?.35:0)],
-      ['think',.08+t.patience*.3+(context.memoryMatch?.16:0)],
+      ['think',.08+t.patience*.3+(context.memoryMatch?.16:0)+(context.memoryConflict?.12:0)],
       ['wave',.04+t.sociability*.25+(context.userActive?.18:0)+(context.nearCharacter?.12:0)]
     ];
     const goalType=goal?.type==='friend'?'socialize':goal?.type;
@@ -75,5 +76,5 @@
     choices.sort((a,b)=>b[1]-a[1]);
     return window.XPActions?.normalize(choices[0]?.[0]||'idle')||choices[0]?.[0]||'idle';
   }
-  window.XPAI=Object.freeze({PERSONALITIES,ABILITIES,TRAITS,NEEDS,hash,profile,decide,normalizeNeeds,decayNeeds,emotion,retrieveMemories});
+  window.XPAI=Object.freeze({PERSONALITIES,ABILITIES,TRAITS,NEEDS,DEFAULT_NEEDS,hash,profile,decide,normalizeNeeds,decayNeeds,emotion,retrieveMemories});
 })();

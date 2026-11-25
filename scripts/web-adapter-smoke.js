@@ -46,6 +46,19 @@ class FakeElement {
   assert.equal(host.children[0].src, 'https://example.org/path');
   await window.xpHost.browser.command('browser-test', 'navigate', { url: 'javascript://alert(1)' });
   assert.match(states.at(-1).tabs[0].url, /^https:\/\/www\.google\.com\/search\?q=/, 'non-web protocols must never be loaded as executable iframe URLs');
+  await window.xpHost.browser.command('browser-test', 'navigate', { url: 'cats' });
+  assert.match(states.at(-1).tabs[0].url, /^https:\/\/www\.google\.com\/search\?q=cats$/, 'single-word input should be searched rather than opened as https://cats');
+  await window.xpHost.browser.command('browser-test', 'navigate', { url: 'funny stickman animation' });
+  assert.match(states.at(-1).tabs[0].url, /q=funny%20stickman%20animation$/, 'multi-word input should use the current search engine');
+  await window.xpHost.browser.command('browser-test', 'navigate', { url: 'example.org/docs' });
+  assert.equal(states.at(-1).tabs[0].url, 'https://example.org/docs');
+  await window.xpHost.browser.command('browser-test', 'navigate', { url: 'localhost:8080/ready' });
+  assert.equal(states.at(-1).tabs[0].url, 'http://localhost:8080/ready');
+  await window.xpHost.browser.command('browser-test', 'navigate', { url: 'duckduckgo', forceSearch: true });
+  assert.match(states.at(-1).tabs[0].url, /^https:\/\/www\.google\.com\/search\?q=duckduckgo$/, 'explicit search must force a query even when text resembles a URL');
+  await window.xpHost.browser.command('browser-test', 'settings', { home: 'https://www.google.com', engine: 'duckduckgo' });
+  await window.xpHost.browser.command('browser-test', 'navigate', { url: 'stickman brain' });
+  assert.match(states.at(-1).tabs[0].url, /^https:\/\/duckduckgo\.com\/\?q=stickman%20brain$/, 'the selected search engine must be respected by the web adapter');
 
   await window.xpHost.browser.command('browser-test', 'new-tab');
   assert.equal(states.at(-1).tabs.length, 2);

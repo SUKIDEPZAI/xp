@@ -1,8 +1,8 @@
 {
   "name": "windows-xp-living-desktop",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": true,
-  "description": "Windows XP living desktop with autonomous stickmen, vector/animation studio, and Neon cloud sync",
+  "description": "Windows XP living desktop with autonomous stickmen, Paint-based appearance editor, procedural animation and Neon cloud sync",
   "main": "main.js",
   "engines": {
     "node": ">=22"
@@ -11,7 +11,7 @@
     "start": "node scripts/serve-web.js",
     "dev": "node scripts/serve-web.js",
     "electron": "electron .",
-    "check": "node --check main.js && node --check preload.js && node --check scripts/load-env.js && node --check scripts/serve-web.js && node --check scripts/migrate.js && node --check drizzle.config.js && node --check server/api.js && node --check server/database.js && node --check server/schema.js && node --check ui/host-adapter.js && node --check ui/desktop.js && node --check ui/modules/event-bus.js && node --check ui/modules/wasm-adapter.js && node --check ui/modules/action-registry.js && node --check ui/modules/storage-manager.js && node --check ui/modules/ai-engine.js && node --check ui/modules/perception.js && node --check ui/modules/interaction-api.js && node --check ui/modules/drawing-engine.js && node --check ui/modules/animation-engine.js && node --check ui/modules/animation-studio.js && node --check ui/modules/cloud-sync.js && node --check ui/modules/window-manager.js && node --check ui/modules/context-menu.js && node --check ui/modules/stickman-runtime.js",
+    "check": "node --check main.js && node --check preload.js && node --check scripts/load-env.js && node --check scripts/serve-web.js && node --check scripts/migrate.js && node --check drizzle.config.js && node --check server/api.js && node --check server/database.js && node --check server/schema.js && node --check ui/host-adapter.js && node --check ui/desktop.js && node --check ui/modules/event-bus.js && node --check ui/modules/wasm-adapter.js && node --check ui/modules/action-registry.js && node --check ui/modules/storage-manager.js && node --check ui/modules/ai-engine.js && node --check ui/modules/perception.js && node --check ui/modules/interaction-api.js && node --check ui/modules/drawing-engine.js && node --check ui/modules/animation-engine.js && node --check ui/modules/stickman-appearance.js && node --check ui/modules/cloud-sync.js && node --check ui/modules/window-manager.js && node --check ui/modules/context-menu.js && node --check ui/modules/stickman-runtime.js",
     "test": "node scripts/smoke-test.js && node scripts/feature-smoke.js && node scripts/main-process-smoke.js && node scripts/web-adapter-smoke.js && node scripts/web-target-smoke.js",
     "test:rust": "cargo test --manifest-path rust-core/Cargo.toml",
     "build:wasm": "cd rust-core && wasm-pack build --target web --release --out-dir ../ui/wasm-core --out-name xp_core",

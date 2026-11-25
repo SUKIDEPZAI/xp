@@ -1,6 +1,6 @@
-# Windows XP Living Desktop — Autonomous Stickman Ultimate (v0.4.2)
+# Windows XP Living Desktop — Autonomous Stickman Ultimate (v0.4.3)
 
-A browser-first Windows XP Luna desktop simulation with local applications, autonomous 2D stickmen, a vector drawing engine, a keyframe Animation Studio, and an optional same-origin Node.js + Neon PostgreSQL account/sync service. The Electron shell remains available for local desktop use.
+A browser-first Windows XP Luna desktop simulation with local applications, autonomous 2D stickmen, Paint-based character creation and appearance editing, personality-generated animation, and an optional same-origin Node.js + Neon PostgreSQL account/sync service. The Electron shell remains available for local desktop use.
 
 The simulation is a deterministic, rules-based character system. It is not a sentient agent and does not use a hosted LLM.
 
@@ -113,10 +113,10 @@ Electron continues to use the isolated preload bridge (`contextIsolation`, sandb
 ## Included desktop applications and features
 
 - XP Luna-style desktop, Start Menu, taskbar, resizable windows, context menus, desktop icon layout persistence, and Luna Blue / Olive / Silver / Classic themes.
-- My Computer, My Documents, Recycle Bin, Internet Explorer simulation, Paint, Notepad, Calculator, Minesweeper, Solitaire, Media Player, Control Panel, Search, Help, Run, Stickman Manager, artwork library, Online Account & Sync, and Stickman Animation Studio.
+- My Computer, My Documents, Recycle Bin, Internet Explorer simulation, Paint, Notepad, Calculator, Minesweeper, Solitaire, Media Player, Control Panel, Search, Help, Run, Stickman Manager, and Online Account & Sync. Creative assets are shown in each Stickman profile; no separate Animation Studio or My Drawings & Animations app is loaded.
 - Paint supports pen/brush/eraser, line, rectangle, circle, fill, undo/redo, import, canvas resize, and PNG export.
 - Stickmen use one action registry, per-character trait/need profiles, utility scoring, cooldown/repetition controls, basic physics, pointer/window/icon perception, safe allowlisted desktop interactions, social greeting/relationship counters, bounded episodic memories, and locally stored creative output.
-- Drawing assets are validated vector command documents and can export SVG/PNG/JSON. The Animation Studio includes sample keyframe projects, pose preview, timeline/frame editing, onion-skin preview, playback, JSON import/export, and sprite-sheet export.
+- Drawing assets are validated vector command documents and can export SVG/PNG/JSON. Each new Stickman receives a deterministic, personality- and trait-driven keyframe animation. Generated animations can be previewed from the Stickman profile.
 - IndexedDB stores characters, memories, drawings, animation projects, settings, and pending sync snapshots.
 
 ## Tests and known verification limits
@@ -146,3 +146,18 @@ The tests are meaningful source/runtime smoke tests, not proof that every reques
 
 This project must listen on an unprivileged container port. Set the SnapDeploy container/listener port to `8080` and use `npm start`. The server binds to `0.0.0.0` and reads the platform-provided `PORT`; it exits early with an actionable message if `PORT` is below `1024` (for example, `80`). Do not configure the Node process to listen on port `80`. Ensure the deployed source is version `0.4.2` or later. The image uses two Docker stages, and startup logs should identify `windows-xp-living-desktop@0.4.2`.
 
+
+
+## v0.4.3 — Paint-first Stickman workflow
+
+- Removed the standalone Animation Studio loader/module and old studio-only UI styling. Removed the standalone artwork-library app from the documented app set; drawings and animation projects are surfaced inside each character profile instead.
+- Paint now has **Tạo Stickman** and **Chỉnh Stickman…** controls. New characters are created as separate structured Stickman profiles, then composited onto the canvas only when the user explicitly confirms creation. The operation records an undo snapshot.
+- The appearance editor adds head shape, skin tone, hair style/color, clothing/style color, accessories, expression, accent color, and a live preview. **Tối ưu ngoại hình** deterministically refines only the selected Stickman's structured appearance profile. It does not scan, classify, or rewrite any imported image or other Paint pixels.
+- Appearance is stored under `character.profile.appearance`, rendered by the desktop character renderer, and preserved in the existing PostgreSQL `profile jsonb` column. No database migration is required for this additive profile field.
+- New Stickmen receive an automatically generated multi-keyframe animation based on personality and selected traits. A separate **Tạo animation** action is available from the profile. Projects remain in IndexedDB and join the normal authenticated cloud-sync snapshot.
+- AI planner fixes include sensible initial needs rather than all-zero defaults, goal lifecycle progression, and memory-category cues for social and creative decisions. Renaming a character now preserves appearance.
+- The web browser adapter now matches Electron URL/search detection: single words and phrases are search queries, hostnames/local addresses remain navigations, and an explicit **Tìm** action forces search. Google, Bing and DuckDuckGo can be selected.
+
+## v0.4.3 — Verification boundaries
+
+`npm run check` and `npm test` pass in the source-editing environment. They cover syntax, appearance model validation, generated animation keyframes, AI need defaults, browser query routing, Electron IPC mocks, and HTTP server readiness behavior. Live Neon credentials and a SnapDeploy deployment were not available here; see `UPGRADE_REPORT.md` for the verification checklist and remaining limitations.

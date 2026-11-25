@@ -141,6 +141,13 @@ function paint(b,f,record){
  btn(tb,'Xóa hết',()=>{snapshot();x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)});
  btn(tb,'Resize Canvas',()=>{const dimensions=prompt('Canvas size (width,height):',`${c.width},${c.height}`);if(!dimensions)return;const [w,h]=dimensions.split(/[x, ]+/).map(Number);if(!Number.isInteger(w)||!Number.isInteger(h)||w<64||h<64||w>2048||h>2048){alert('Choose width and height between 64 and 2048 pixels.');return}const copy=document.createElement('canvas');copy.width=c.width;copy.height=c.height;copy.getContext('2d').drawImage(c,0,0);c.width=w;c.height=h;x.fillStyle='#fff';x.fillRect(0,0,w,h);x.drawImage(copy,0,0,w,h);U=[x.getImageData(0,0,w,h)];R=[]});
  btn(tb,'Mở ảnh',()=>pick('image/*',l=>load(l[0])));
+ btn(tb,'Tạo Stickman',()=>createStickman({canvas:c,snapshot,addToCanvas}));
+ const editSelect=document.createElement('select');editSelect.title='Chỉnh ngoại hình Stickman';
+ const refreshEditOptions=()=>{const selected=editSelect.value;editSelect.replaceChildren(new Option('Chỉnh Stickman…',''));for(const person of XPStickman.list())editSelect.add(new Option(person.name,person.id));if([...editSelect.options].some(option=>option.value===selected))editSelect.value=selected};
+ refreshEditOptions();
+ editSelect.onchange=()=>{const id=editSelect.value;if(id)createStickman({canvas:c,snapshot,addToCanvas,character:XPStickman.get(id)});editSelect.value=''};
+ tb.append(editSelect);
+ const offCreated=XPBus.on('stickman:created',refreshEditOptions),offLoaded=XPBus.on('stickman:loaded',refreshEditOptions);
  btn(tb,'Lưu PNG',exportPNG);
  '#000000,#808080,#800000,#808000,#008000,#008080,#000080,#800080,#ffffff,#c0c0c0,#ff0000,#ffff00,#00ff00,#00ffff,#0000ff,#ff00ff'.split(',').forEach(k=>{const e=btn(pl,'',()=>{col=k;colpick.value=k});e.className='sw';e.style.background=k});
  function load(fl){if(!fl)return;const im=new Image();im.onload=()=>{snapshot();c.width=im.width;c.height=im.height;x.drawImage(im,0,0);URL.revokeObjectURL(im.src)};im.src=URL.createObjectURL(fl)}
@@ -160,9 +167,15 @@ function paint(b,f,record){
     const blob=await item.getType(type),im=await createImageBitmap(blob);snapshot();x.drawImage(im,0,0);return}
   }catch(error){alert('Không thể đọc ảnh từ clipboard.')}
  }
- const actions={undo,redo,copy,cut:async()=>{await copy();snapshot();x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)},paste,selectAll:()=>{selection={x:0,y:0,w:c.width,h:c.height};x.save();x.strokeStyle='#1764c0';x.setLineDash([5,4]);x.strokeRect(1,1,c.width-2,c.height-2);x.restore()},createStickman:()=>createStickman(),export:exportPNG};
+ function addToCanvas(agent){
+  const px=Math.max(42,Math.min(c.width-42,c.width/2));
+  const py=Math.max(90,Math.min(c.height-16,c.height*.76));
+  XPAnimation.draw(x,px,py,XPAnimation.poseFor('idle',0),agent.color,1.45,{},agent.profile?.appearance);
+  XPBus.emit('desktop:event',{kind:'paint-draw',source:'stickman-creator',characterId:agent.id});
+ }
+ const actions={undo,redo,copy,cut:async()=>{await copy();snapshot();x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)},paste,selectAll:()=>{selection={x:0,y:0,w:c.width,h:c.height};x.save();x.strokeStyle='#1764c0';x.setLineDash([5,4]);x.strokeRect(1,1,c.width-2,c.height-2);x.restore()},createStickman:(characterId=null)=>createStickman({canvas:c,snapshot,addToCanvas,character:characterId?XPStickman.get(characterId):null}),editStickman:characterId=>createStickman({canvas:c,snapshot,addToCanvas,character:XPStickman.get(characterId)}),export:exportPNG};
  window.XPPaint=window.XPPaint||{};window.XPPaint[record.id]=actions;
- record.cleanup=()=>{delete window.XPPaint[record.id]};
+ record.cleanup=()=>{delete window.XPPaint[record.id];offCreated();offLoaded()};
  function pos(e){const r=c.getBoundingClientRect();return[(e.clientX-r.left)*c.width/r.width,(e.clientY-r.top)*c.height/r.height]}
  function fill(sx,sy){
   const im=x.getImageData(0,0,c.width,c.height),q=im.data,W=c.width,H=c.height,h=parseInt(col.slice(1),16),R=h>>16,G=h>>8&255,B=h&255,i0=(sy*W+sx)*4,tr=q[i0],tg=q[i0+1],tbb=q[i0+2];
@@ -298,6 +311,11 @@ function ie(b,_arg,record){
  address.addEventListener('keydown',e=>{if(e.key==='Enter'){command('navigate',{url:address.value});address.blur()}});
  address.addEventListener('focus',()=>address.select());
  toolbar.append(address);
+ const engineSelect=document.createElement('select');engineSelect.className='browser-engine';engineSelect.title='Công cụ tìm kiếm';
+ [['google','Google'],['bing','Bing'],['duckduckgo','DuckDuckGo']].forEach(([value,label])=>engineSelect.add(new Option(label,value)));
+ engineSelect.onchange=()=>command('settings',{home:state.store?.home||'https://www.google.com',engine:engineSelect.value});
+ toolbar.append(engineSelect);
+ btn(toolbar,'Tìm',()=>command('navigate',{url:address.value,forceSearch:true})).title='Tìm nội dung, không mở như địa chỉ';
  btn(toolbar,'Đi',()=>command('navigate',{url:address.value}));
  const star=btn(toolbar,'☆',()=>command('bookmark'));star.title='Thêm hoặc bỏ dấu trang';
  btn(toolbar,'Dấu trang',async()=>{
@@ -320,7 +338,7 @@ function ie(b,_arg,record){
  });
  function render(s){
   if(!s||s.sessionId!==sessionId)return;
-  state=s;tabbar.replaceChildren();
+  state=s;tabbar.replaceChildren();engineSelect.value=s.store?.engine||'google';
   for(const tab of s.tabs){
    const t=document.createElement('button');t.className='browser-tab'+(tab.id===s.activeTabId?' active':'');t.type='button';t.dataset.tabId=String(tab.id);
    const label=document.createElement('span');label.textContent=(tab.loading?'◌ ':'')+(tab.title||'Tab mới');
@@ -364,37 +382,81 @@ function stickmanApp(b,_arg,record){
    const sub=document.createElement('small');sub.textContent=`${a.personality} · ${a.state} · ${a.memoryCount} ký ức`;
    info.append(name,sub);
    const profile=btn(row,'Hồ sơ',()=>showStickmanProfile(a.id));
+   const edit=btn(row,'Ngoại hình',()=>openPaintStickmanCreator(a.id));
    const memories=btn(row,'Ký ức',()=>XPStickman.showMemory(a.id));
    const follow=btn(row,a.follow?'Dừng theo':'Theo chuột',()=>XPStickman.command(a.id,a.follow?'stay':'follow'));
-   row.append(dot,info,profile,memories,follow);list.append(row);
+   row.append(dot,info,profile,edit,memories,follow);list.append(row);
   }
  };
- b.querySelector('[data-new]').onclick=createStickman;
+ b.querySelector('[data-new]').onclick=()=>openPaintStickmanCreator();
  b.querySelector('[data-export]').onclick=()=>XPStickman.exportAll();
  b.querySelector('[data-import]').onclick=()=>pick('.json',async files=>{
   if(!files?.[0])return;
   try{const data=JSON.parse(await files[0].text());await XPStickman.importAll(data);refresh()}catch(e){alert('JSON không hợp lệ: '+e.message)}
  });
  b.querySelector('[data-refresh]').onclick=refresh;
- const offCreated=XPBus.on('stickman:created',refresh);const offMemory=XPBus.on('stickman:memory',refresh);
- record.cleanup=()=>{offCreated();offMemory()};
+ const offCreated=XPBus.on('stickman:created',refresh);const offLoaded=XPBus.on('stickman:loaded',refresh);const offMemory=XPBus.on('stickman:memory',refresh);
+ record.cleanup=()=>{offCreated();offLoaded();offMemory()};
  setTimeout(()=>{if(record.el.isConnected)refresh()},300);
 }
-function createStickman(){
+function createStickman({canvas=null,snapshot=null,addToCanvas=null,character=null}={}){
+ const appearanceApi=window.XPStickmanAppearance;
+ if(!appearanceApi){alert('Stickman Appearance chưa sẵn sàng.');return}
  const shade=document.createElement('div');shade.className='xp-dialog-shade';
- const form=document.createElement('form');form.className='xp-dialog';
- const title=document.createElement('h3');title.textContent='New Stickman — Character Identity';
- const field=(label,control)=>{const wrap=document.createElement('label');wrap.textContent=label;wrap.append(control);form.append(wrap);return control};
- const name=document.createElement('input');name.required=true;name.maxLength=32;name.value='Shadow';field('Character Name',name);
- const color=document.createElement('input');color.type='color';color.value='#202020';field('Character Color',color);
- const personality=document.createElement('select');XPAI.PERSONALITIES.forEach(x=>personality.add(new Option(x,x)));field('Personality',personality);
- const note=document.createElement('p');note.textContent='Intelligence Profile và năng lực được tạo ổn định từ tên cùng ID nhân vật.';form.append(note);
+ const form=document.createElement('form');form.className='xp-dialog xp-stickman-creator';
+ const title=document.createElement('h3');title.textContent=character?'Edit Stickman Appearance':'Create a Stickman in Paint';
+ const layout=document.createElement('div');layout.className='stickman-creator-layout';
+ const controls=document.createElement('div');controls.className='stickman-creator-controls';
+ const preview=document.createElement('canvas');preview.width=220;preview.height=230;preview.className='stickman-creator-preview';
+ const field=(label,control)=>{const wrap=document.createElement('label');wrap.textContent=label;wrap.append(control);controls.append(wrap);return control};
+ const name=document.createElement('input');name.required=true;name.maxLength=32;name.value=character?.name||'Shadow';field('Tên nhân vật',name);
+ const personality=document.createElement('select');XPAI.PERSONALITIES.forEach(value=>personality.add(new Option(value,value)));personality.value=character?.personality||'Curious';field('Tính cách',personality);
+ const lineColor=document.createElement('input');lineColor.type='color';lineColor.value=character?.color||'#202020';field('Màu nét chính',lineColor);
+ const currentAppearance=()=>appearanceApi.normalize(character?.profile?.appearance||appearanceApi.create(character?.id||name.value,lineColor.value,personality.value),lineColor.value);
+ let look=currentAppearance();
+ const selectField=(label,values,selected)=>{const control=document.createElement('select');values.forEach(value=>control.add(new Option(({tee:'T-shirt',hoodie:'Hoodie',jacket:'Jacket',sweater:'Sweater',none:'Không có',glasses:'Kính',scarf:'Khăn',headphones:'Tai nghe',badge:'Huy hiệu',short:'Tóc ngắn',spiky:'Tóc nhọn',fringe:'Mái',long:'Tóc dài',cap:'Mũ',round:'Tròn',soft:'Bo mềm',square:'Vuông',smile:'Cười',neutral:'Trung tính',focused:'Tập trung'}[value]||value),value)));control.value=selected;field(label,control);return control};
+ const skin=selectField('Tông da',appearanceApi.SKIN_TONES,look.skinTone);
+ const hairStyle=selectField('Kiểu tóc',appearanceApi.HAIR,look.hairStyle);
+ const hairColor=document.createElement('input');hairColor.type='color';hairColor.value=look.hairColor;field('Màu tóc',hairColor);
+ const outfitStyle=selectField('Trang phục',appearanceApi.OUTFITS,look.outfitStyle);
+ const outfitColor=document.createElement('input');outfitColor.type='color';outfitColor.value=look.outfitColor;field('Màu trang phục',outfitColor);
+ const accessory=selectField('Phụ kiện',appearanceApi.ACCESSORIES,look.accessory);
+ const expression=selectField('Biểu cảm',appearanceApi.EXPRESSIONS,look.expression);
+ const headShape=selectField('Kiểu đầu',appearanceApi.HEAD_SHAPES,look.headShape);
+ const accentColor=document.createElement('input');accentColor.type='color';accentColor.value=look.accentColor;field('Màu nhấn',accentColor);
+ const previewPanel=document.createElement('div');previewPanel.className='stickman-creator-preview-panel';
+ const previewLabel=document.createElement('b');previewLabel.textContent='Live Preview';const previewNote=document.createElement('small');previewNote.textContent='Tối ưu chỉ tác động lên hồ sơ ngoại hình Stickman, không quét hoặc chỉnh sửa ảnh Paint.';previewPanel.append(previewLabel,preview,previewNote);
+ layout.append(controls,previewPanel);
+ const status=document.createElement('p');status.className='creator-status';status.textContent=character?'Chỉnh sửa hồ sơ nhân vật hiện có.':'Tạo nhân vật dạng vector, có ngoại hình riêng và animation tự động.';
  const actions=document.createElement('div');actions.className='dialog-actions';
  const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Hủy';cancel.onclick=()=>shade.remove();
- const save=document.createElement('button');save.type='submit';save.textContent='Tạo nhân vật';
- actions.append(cancel,save);form.append(actions);form.prepend(title);shade.append(form);document.body.append(shade);name.focus();
- form.onsubmit=async e=>{e.preventDefault();const a=await XPStickman.spawn({name:name.value,color:color.value,personality:personality.value});shade.remove();showStickmanProfile(a.id)};
+ const optimize=document.createElement('button');optimize.type='button';optimize.textContent='✨ Tối ưu ngoại hình';
+ const save=document.createElement('button');save.type='submit';save.textContent=character?'Lưu ngoại hình':'Tạo Stickman';
+ actions.append(cancel,optimize,save);form.append(title,layout,status,actions);shade.append(form);document.body.append(shade);
+ const readLook=()=>appearanceApi.normalize({headShape:headShape.value,skinTone:skin.value,hairStyle:hairStyle.value,hairColor:hairColor.value,outfitStyle:outfitStyle.value,outfitColor:outfitColor.value,accessory:accessory.value,expression:expression.value,accentColor:accentColor.value},lineColor.value);
+ const paintLook=()=>{look=readLook();const ctx=preview.getContext('2d');ctx.clearRect(0,0,preview.width,preview.height);ctx.fillStyle='#f5f8fc';ctx.fillRect(0,0,preview.width,preview.height);ctx.strokeStyle='#d7e2f0';ctx.strokeRect(8,8,preview.width-16,preview.height-16);XPAnimation.draw(ctx,preview.width/2,190,XPAnimation.poseFor('idle',0),lineColor.value,1.8,{},look);ctx.fillStyle='#52657b';ctx.font='11px Tahoma';ctx.textAlign='center';ctx.fillText(name.value||'Stickman',preview.width/2,22)};
+ [name,personality,lineColor,skin,hairStyle,hairColor,outfitStyle,outfitColor,accessory,expression,headShape,accentColor].forEach(control=>control.addEventListener('input',paintLook));
+ optimize.onclick=()=>{look=appearanceApi.refine(readLook(),{seed:character?.id||name.value,personality:personality.value,primaryColor:lineColor.value});skin.value=look.skinTone;hairStyle.value=look.hairStyle;hairColor.value=look.hairColor;outfitStyle.value=look.outfitStyle;outfitColor.value=look.outfitColor;accessory.value=look.accessory;expression.value=look.expression;headShape.value=look.headShape;accentColor.value=look.accentColor;paintLook();status.textContent='Đã cân chỉnh bảng màu, kiểu tóc, trang phục và phụ kiện cho riêng Stickman.'};
+ form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{const data={color:lineColor.value,appearance:readLook()};if(character){await XPStickman.updateAppearance(character.id,data);status.textContent='Đã lưu ngoại hình nhân vật.';shade.remove();}else{const agent=await XPStickman.spawn({name:name.value,color:data.color,personality:personality.value,appearance:data.appearance});if(canvas&&addToCanvas){snapshot?.();addToCanvas(agent)}shade.remove();showStickmanProfile(agent.id)}}catch(error){save.disabled=false;status.textContent=`Không thể lưu Stickman: ${error.message}`} };
+ paintLook();name.focus();
 }
+function openPaintStickmanCreator(characterId=null){
+ const existing=[...XPWM.windows.values()].find(item=>item.appId==='paint'&&!item.destroyed);
+ if(existing){if(existing.minimized)XPWM.restore(existing.id);else XPWM.focus(existing.id);window.XPPaint?.[existing.id]?.createStickman(characterId);return existing}
+ const record=run('paint');if(record)window.XPPaint?.[record.id]?.createStickman(characterId);return record;
+}
+function previewStickmanAnimation(project,character){
+ const record=XPWM.create({title:project.name||'Stickman Animation Preview',icon:'▶',width:500,height:340,appId:'animation-preview',build:(body,el,windowRecord)=>{
+  body.innerHTML='<div class="stickman-animation-preview"><canvas width="460" height="250"></canvas><div class="bar"><button data-play>▶ Play</button><span data-status>Generated animation</span></div></div>';
+  const canvas=body.querySelector('canvas'),ctx=canvas.getContext('2d'),play=body.querySelector('[data-play]'),status=body.querySelector('[data-status]');let frame=0,started=0,raf=0,playing=false;
+  const appearance=character?.profile?.appearance||project.metadata?.appearance||null,color=character?.color||'#202020';
+  const render=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.strokeStyle='#dce5ef';ctx.strokeRect(8,8,canvas.width-16,canvas.height-16);const value=XPAnimation.interpolate(project,frame);const pose=XPAnimation.poseFor(value.pose,frame*1000/project.fps);XPAnimation.draw(ctx,canvas.width/2+value.x,canvas.height/2+value.y+28,pose,value.color||color,1.65,{},appearance);status.textContent=`${project.fps} FPS · Frame ${Math.round(frame)} / ${project.duration}`};
+  const stop=()=>{playing=false;if(raf)cancelAnimationFrame(raf);raf=0;play.textContent='▶ Play'};
+  play.onclick=()=>{if(playing){stop();return}playing=true;play.textContent='Ⅱ Pause';started=performance.now()-frame*1000/project.fps;const tick=now=>{if(!playing)return;frame=((now-started)*project.fps/1000)%project.duration;render();raf=requestAnimationFrame(tick)};raf=requestAnimationFrame(tick)};
+  render();windowRecord.cleanup=stop;
+ }});return record;
+}
+
 function showStickmanProfile(id){
  const a=XPStickman.get(id);if(!a)return;
  const body=document.createElement('div');body.className='stickman-profile';
@@ -412,23 +474,26 @@ function showStickmanProfile(id){
  if(!(a.goals||[]).length){const p=document.createElement('p');p.textContent='No saved goals yet. The autonomous planner creates short-term goals from desktop context.';goals.append(p)}else for(const goal of a.goals){const p=document.createElement('p');p.textContent=`${goal.type||goal.goalType} · ${goal.status||'active'} · ${Math.round((goal.progress||0)*100)}%`;goals.append(p)}body.append(goals);
  const social=document.createElement('section');social.className='profile-section';const socialTitle=document.createElement('h3');socialTitle.textContent='Relationships';social.append(socialTitle);
  const entries=Object.entries(a.relationships||{});if(!entries.length){const p=document.createElement('p');p.textContent='No relationships recorded yet.';social.append(p)}else entries.slice(0,12).forEach(([otherId,affinity])=>{const other=XPStickman.get(otherId);const p=document.createElement('p');p.textContent=`${other?.name||'Unknown Stickman'} · ${affinity} interactions`;social.append(p)});body.append(social);
- const actions=document.createElement('div');actions.className='bar profile-actions';
+ const actions=document.createElement('div');actions.className='bar profile-actions';let refreshAssets=()=>{};
  [['Talk','talk'],['Follow','follow'],['Stay','stay'],['Wave','wave'],['Play','play'],['Rest','rest'],['Create Artwork','create'],['Interact','interact']].forEach(([label,command])=>btn(actions,label,async()=>{await XPStickman.command(id,command);refreshHeader()}));
- btn(actions,'Animation Studio',()=>window.launchApp?.('animation'));btn(actions,'View Memory',()=>XPStickman.showMemory(id));btn(actions,'Rename',async()=>{await XPStickman.rename(id);const updated=XPStickman.get(id);h.textContent=updated?.name||a.name;caption.textContent=`${updated?.personality||a.personality} · ${updated?.state||a.state} · ${updated?.action||a.action}`});
+ btn(actions,'Chỉnh ngoại hình trong Paint',()=>openPaintStickmanCreator(id));
+ btn(actions,'Tạo animation',async()=>{const project=await XPStickman.generateAnimation(id);if(project){previewStickmanAnimation(project,XPStickman.get(id));refreshAssets()}});
+ btn(actions,'View Memory',()=>XPStickman.showMemory(id));btn(actions,'Rename',async()=>{await XPStickman.rename(id);const updated=XPStickman.get(id);h.textContent=updated?.name||a.name;caption.textContent=`${updated?.personality||a.personality} · ${updated?.state||a.state} · ${updated?.action||a.action}`});
  btn(actions,'Duplicate',()=>XPStickman.duplicate(id));btn(actions,'Delete',async()=>{if(await XPStickman.remove(id))window.XPWM.close(record.id)});btn(actions,'Toggle Autonomy',()=>{XPStickman.setAutonomy(id,!a.autonomy);a.autonomy=!a.autonomy;refreshHeader()});body.append(actions);
- const assets=document.createElement('section');assets.className='profile-section';const assetsTitle=document.createElement('h3');assetsTitle.textContent='Drawings & Animations';assets.append(assetsTitle);const assetList=document.createElement('div');assetList.className='profile-assets';const loading=document.createElement('small');loading.textContent='Loading creative assets…';assetList.append(loading);assets.append(assetList);body.append(assets);
+ const assets=document.createElement('section');assets.className='profile-section';const assetsTitle=document.createElement('h3');assetsTitle.textContent='Sáng tạo của Stickman';assets.append(assetsTitle);const assetList=document.createElement('div');assetList.className='profile-assets';const loading=document.createElement('small');loading.textContent='Loading creative assets…';assetList.append(loading);assets.append(assetList);body.append(assets);
  const refreshHeader=()=>{const latest=XPStickman.get(id);if(!latest)return;h.textContent=latest.name;caption.textContent=`${latest.personality} · ${latest.state} · ${latest.action}`};
  const record=XPWM.create({title:`Character Profile — ${a.name}`,icon:'🧠',width:520,height:660,appId:'stickman-profile',build:bd=>bd.append(body)});
- Promise.all([XPStorage.getDrawings(),XPStorage.getAnimations()]).then(([drawings,animations])=>{
+ refreshAssets=()=>Promise.all([XPStorage.getDrawings(),XPStorage.getAnimations()]).then(([drawings,animations])=>{
    assetList.replaceChildren();const items=[...drawings.filter(x=>x.characterId===id).map(x=>({...x,kind:'drawing'})),...animations.filter(x=>x.characterId===id).map(x=>({...x,kind:'animation'}))];
-   if(!items.length){const p=document.createElement('p');p.textContent='No drawings or animations for this character yet.';assetList.append(p)}
-   for(const item of items){const row=document.createElement('div');row.className='profile-asset';const label=document.createElement('span');label.textContent=`${item.kind==='drawing'?'Drawing':'Animation'} · ${item.name}`;row.append(label);row.append(btn(row,'Open',()=>{if(item.kind==='animation')window.launchApp?.('animation',item.id);else{const blob=new Blob([XPDrawing.toSVG(item)],{type:'image/svg+xml'});Object.defineProperty(blob,'name',{value:`${item.name}.svg`});window.launchApp?.('paint',blob)}}));assetList.append(row)}
+   if(!items.length){const p=document.createElement('p');p.textContent='Chưa có bản vẽ hoặc animation cho Stickman này.';assetList.append(p)}
+   for(const item of items){const row=document.createElement('div');row.className='profile-asset';const label=document.createElement('span');label.textContent=`${item.kind==='drawing'?'Bản vẽ':'Animation'} · ${item.name}`;row.append(label);row.append(btn(row,'Mở',()=>{if(item.kind==='animation')previewStickmanAnimation(item,XPStickman.get(id));else{const blob=new Blob([XPDrawing.toSVG(item)],{type:'image/svg+xml'});Object.defineProperty(blob,'name',{value:`${item.name}.svg`});window.launchApp?.('paint',blob)}}));assetList.append(row)}
  }).catch(error=>{assetList.textContent=error.message});
+ refreshAssets();
  const offAction=XPBus.on('stickman:action',event=>{if(event.id===id)refreshHeader()}),offMemory=XPBus.on('stickman:memory',event=>{if(event.id===id)refreshHeader()});
  record.cleanup=()=>{offAction();offMemory()};
 }
 window.showStickmanProfile=showStickmanProfile;
-window.createStickman=createStickman;
+window.createStickman=()=>openPaintStickmanCreator();
 
 /* Control Panel, Search and Run utilities */
 function controlPanelApp(b){
@@ -514,31 +579,6 @@ function runApp(b){
  b.querySelector('[data-run]').onclick=launch;input.addEventListener('keydown',e=>{if(e.key==='Enter')launch()});
 }
 
-/* Local artwork library: vector drawings and saved keyframe projects */
-function artworkApp(b,initial,record){
- b.innerHTML=`<div class="bar"><button data-new-drawing>New Drawing</button><button data-animation>Open Animation Studio</button><button data-refresh>Refresh</button></div><div class="artwork-list" data-list></div><div class="sb" data-count>Local creative assets</div>`;
- const list=b.querySelector('[data-list]'),count=b.querySelector('[data-count]'),urls=[];
- const refresh=async()=>{
-  urls.splice(0).forEach(URL.revokeObjectURL);list.replaceChildren();const [drawings,animations]=await Promise.all([XPStorage.getDrawings(),XPStorage.getAnimations()]);
-  const items=[...drawings.map(d=>({...d,kind:'drawing'})),...animations.map(a=>({...a,kind:'animation'}))].sort((a,z)=>(z.updatedAt||0)-(a.updatedAt||0));
-  if(!items.length){const empty=document.createElement('p');empty.textContent='No drawings or animation projects have been saved yet.';list.append(empty)}
-  for(const item of items){
-   const row=document.createElement('div');row.className='artwork-card';
-   if(item.kind==='drawing'){
-    const img=document.createElement('img');const url=URL.createObjectURL(new Blob([XPDrawing.toSVG(item)],{type:'image/svg+xml'}));urls.push(url);img.src=url;img.alt=item.name;row.append(img);
-   }else{const preview=document.createElement('div');preview.className='artwork-animation-icon';preview.textContent='▶';row.append(preview)}
-   const meta=document.createElement('div');meta.className='meta';const name=document.createElement('b');name.textContent=item.name;const small=document.createElement('small');small.textContent=`${item.kind==='drawing'?'Vector drawing':'Animation'} · ${new Date(item.updatedAt||Date.now()).toLocaleString('vi-VN')}`;meta.append(name,small);row.append(meta);
-   if(item.kind==='drawing'){
-    row.append(btn(row,'Open in Paint',()=>{const blob=new Blob([XPDrawing.toSVG(item)],{type:'image/svg+xml'});Object.defineProperty(blob,'name',{value:`${item.name}.svg`});window.launchApp?.('paint',blob)}),btn(row,'SVG',()=>XPDrawing.download(item,'svg')),btn(row,'PNG',()=>XPDrawing.exportPNG(item)),btn(row,'JSON',()=>XPDrawing.download(item,'json')));
-   }else row.append(btn(row,'Edit',()=>window.launchApp?.('animation',item.id)),btn(row,'JSON',()=>{const blob=new Blob([JSON.stringify(item,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`${item.name}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}));
-   row.append(btn(row,'Delete',async()=>{if(!confirm(`Delete ${item.name}?`))return;if(item.kind==='drawing')await XPStorage.deleteDrawing(item.id);else await XPStorage.deleteAnimation(item.id);refresh()}));list.append(row);
-  }
-  count.textContent=`${drawings.length} drawings · ${animations.length} animations`;
- };
- b.querySelector('[data-new-drawing]').onclick=()=>window.launchApp?.('paint');b.querySelector('[data-animation]').onclick=()=>window.launchApp?.('animation');b.querySelector('[data-refresh]').onclick=refresh;
- const offDrawing=XPBus.on('drawing:saved',refresh),offAnimation=XPBus.on('animation:saved',refresh);record.cleanup=()=>{offDrawing();offAnimation();urls.forEach(URL.revokeObjectURL)};refresh();
-}
-
 /* Same-origin account and offline-first cloud sync; passwords never enter browser storage. */
 function accountApp(b,_arg,record){
  b.innerHTML=`<div class="bar"><b>Online Account & Cloud Sync</b></div><div class="account-panel"><section><h3>Sign in / Register</h3><form data-auth><label>Username or email<input name="login" autocomplete="username" required></label><label>Email (for registration)<input name="email" type="email" autocomplete="email"></label><label>Password<input name="password" type="password" autocomplete="current-password" minlength="12" required></label><label>New username (for registration)<input name="username" autocomplete="username"></label><div><button type="submit" data-mode="login">Sign In</button><button type="submit" data-mode="register">Create Account</button></div></form><p>Passwords are sent only to this site's API over the same origin and are not saved in local storage.</p></section><section><h3>Cloud Storage</h3><p data-user>Checking session…</p><div class="account-status" data-status>Local data remains available while offline. Sign in to enable cloud sync.</div><div><button data-sync>Sync Now</button><button data-logout>Sign Out</button></div><p>Only Stickman profiles, their memories, drawings, animations and desktop appearance settings are synchronized. Notepad contents, passwords typed into Notepad and browser page contents are not collected.</p></section></div>`;
@@ -571,8 +611,6 @@ const A=[
  ['run','Run',S(`<rect x="3" y="6" width="26" height="20" rx="2" fill="#e4edf7" stroke="#456"/><path d="M8 12h16M8 17h10" stroke="#456" stroke-width="2"/>`),360,190,runApp,false],
  ['documents','My Documents',I.folder,620,430,b=>myc(b,'documents'),false],
  ['pictures','My Pictures',I.img,620,430,b=>myc(b,'pictures'),false],
- ['animation','Stickman Animation Studio',I.note,780,560,(b,arg,record)=>XPAnimationStudio.mount(b,record,arg),true],
- ['artwork','My Drawings & Animations',I.img,720,500,artworkApp,true],
  ['account','Online Account & Sync',I.pc,680,470,accountApp,false]
 ];
 const run=(k,arg)=>{const a=A.find(z=>z[0]===k);if(!a)return null;return openWin(a[1],a[2],a[3],a[4],(bd,el,record)=>a[5](bd,arg,record),k)};

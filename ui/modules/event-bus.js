@@ -2,7 +2,7 @@
   const listeners = new Map();
   const allowed = new Set([
     'desktop:event','window:opened','window:closed','window:focused',
-    'stickman:created','stickman:action','stickman:memory','perception:event','drawing:saved','animation:saved','cloud:synced'
+    'stickman:created','stickman:loaded','stickman:appearance-changed','stickman:action','stickman:memory','perception:event','drawing:saved','animation:saved','cloud:synced'
   ]);
   window.XPBus = Object.freeze({
     on(type, callback) {

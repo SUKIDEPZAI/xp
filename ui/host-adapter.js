@@ -41,8 +41,9 @@
     const value = String(raw || '').trim();
     if (!value) return store.home;
     if (!forceSearch) {
-      const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `https://${value}`;
-      if (validWebUrl(candidate)) return candidate;
+      if (validWebUrl(value)) return value;
+      if (!/\s/.test(value) && /^([\w-]+\.)+[a-z]{2,}(:\d+)?([/?#].*)?$/i.test(value)) return `https://${value}`;
+      if (!/\s/.test(value) && /^(localhost|\d{1,3}(\.\d{1,3}){3})(:\d+)?([/?#].*)?$/i.test(value)) return `http://${value}`;
     }
     return (engines[store.engine] || engines.google)(value);
   }

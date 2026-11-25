@@ -1,5 +1,5 @@
 (() => {
-  const ALLOWED_APPS=new Set(['pc','bin','note','paint','calc','mine','sol','ie','wmp','stickman','control','search','help','run','documents','pictures','animation','artwork','account']);
+  const ALLOWED_APPS=new Set(['pc','bin','note','paint','calc','mine','sol','ie','wmp','stickman','control','search','help','run','documents','pictures','account']);
   function openApp(appId){if(!ALLOWED_APPS.has(String(appId)))return false;return !!window.launchApp?.(String(appId));}
   function focusWindow(id){const record=window.XPWM?.get?.(String(id));if(!record)return false;window.XPWM.focus(record.id);return true;}
   function drawAtPaint(commands){
