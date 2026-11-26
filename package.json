@@ -1,8 +1,8 @@
 {
   "name": "windows-xp-living-desktop",
-  "version": "0.4.3",
+  "version": "0.4.5",
   "private": true,
-  "description": "Windows XP living desktop with autonomous stickmen, Paint-based appearance editor, procedural animation and Neon cloud sync",
+  "description": "Windows XP living desktop with local llama.cpp inference, independent Stickman minds, Paint authoring and Neon cloud sync",
   "main": "main.js",
   "engines": {
     "node": ">=22"
@@ -11,8 +11,8 @@
     "start": "node scripts/serve-web.js",
     "dev": "node scripts/serve-web.js",
     "electron": "electron .",
-    "check": "node --check main.js && node --check preload.js && node --check scripts/load-env.js && node --check scripts/serve-web.js && node --check scripts/migrate.js && node --check drizzle.config.js && node --check server/api.js && node --check server/database.js && node --check server/schema.js && node --check ui/host-adapter.js && node --check ui/desktop.js && node --check ui/modules/event-bus.js && node --check ui/modules/wasm-adapter.js && node --check ui/modules/action-registry.js && node --check ui/modules/storage-manager.js && node --check ui/modules/ai-engine.js && node --check ui/modules/perception.js && node --check ui/modules/interaction-api.js && node --check ui/modules/drawing-engine.js && node --check ui/modules/animation-engine.js && node --check ui/modules/stickman-appearance.js && node --check ui/modules/cloud-sync.js && node --check ui/modules/window-manager.js && node --check ui/modules/context-menu.js && node --check ui/modules/stickman-runtime.js",
-    "test": "node scripts/smoke-test.js && node scripts/feature-smoke.js && node scripts/main-process-smoke.js && node scripts/web-adapter-smoke.js && node scripts/web-target-smoke.js",
+    "check": "node --check main.js && node --check preload.js && node --check scripts/load-env.js && node --check scripts/serve-web.js && node --check scripts/migrate.js && node --check drizzle.config.js && node --check server/api.js && node --check server/ai-store.js && node --check server/ai-orchestrator.js && node --check server/llama-runtime.js && node --check server/database.js && node --check server/schema.js && node --check ui/host-adapter.js && node --check ui/desktop.js && node --check ui/modules/event-bus.js && node --check ui/modules/wasm-adapter.js && node --check ui/modules/action-registry.js && node --check ui/modules/storage-manager.js && node --check ui/modules/ai-engine.js && node --check ui/modules/agent-brain.js && node --check ui/modules/perception.js && node --check ui/modules/interaction-api.js && node --check ui/modules/drawing-engine.js && node --check ui/modules/stickman-drawing.js && node --check ui/modules/animation-engine.js && node --check ui/modules/stickman-appearance.js && node --check ui/modules/cloud-sync.js && node --check ui/modules/window-manager.js && node --check ui/modules/context-menu.js && node --check ui/modules/stickman-runtime.js",
+    "test": "node scripts/smoke-test.js && node scripts/feature-smoke.js && node scripts/main-process-smoke.js && node scripts/web-adapter-smoke.js && node scripts/web-target-smoke.js && node scripts/ai-service-smoke.js && node scripts/llama-cpp-smoke.js && node scripts/stickman-drawing-smoke.js",
     "test:rust": "cargo test --manifest-path rust-core/Cargo.toml",
     "build:wasm": "cd rust-core && wasm-pack build --target web --release --out-dir ../ui/wasm-core --out-name xp_core",
     "db:migrate": "node scripts/migrate.js",

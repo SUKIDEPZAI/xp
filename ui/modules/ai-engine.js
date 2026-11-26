@@ -76,5 +76,66 @@
     choices.sort((a,b)=>b[1]-a[1]);
     return window.XPActions?.normalize(choices[0]?.[0]||'idle')||choices[0]?.[0]||'idle';
   }
-  window.XPAI=Object.freeze({PERSONALITIES,ABILITIES,TRAITS,NEEDS,DEFAULT_NEEDS,hash,profile,decide,normalizeNeeds,decayNeeds,emotion,retrieveMemories});
+  function dispositionForTraits(traits = {}) {
+    const value = key => { const raw=Number(traits[key]); return clamp(Number.isFinite(raw)?raw:.5); };
+    const warm = value('sociability') * .55 + value('empathy') * .45;
+    const curious = value('curiosity') * .55 + value('creativity') * .45;
+    const playful = value('playfulness') * .6 + value('energy') * .4;
+    const thoughtful = value('patience') * .55 + value('cautiousness') * .45;
+    const bold = value('confidence') * .55 + value('competitiveness') * .45;
+    const ranked = [['Thân thiện', warm], ['Ham khám phá', curious], ['Năng động', playful], ['Điềm tĩnh và suy xét', thoughtful], ['Quyết đoán', bold]].sort((a, b) => b[1] - a[1]);
+    return ranked[0][0];
+  }
+  function createMind(characterId, profileValue = {}) {
+    const id=String(characterId||'unknown'),p=profileValue&&typeof profileValue==='object'?profileValue:{};
+    const seed=Number(p.seed)||hash(id),traits={...(p.traits||{})};
+    return {
+      version:1,id:`mind-${id}`,characterId:id,seed,createdAt:Date.now(),updatedAt:Date.now(),
+      experienceCount:0,experiences:[],
+      values:{curiosity:clamp(traits.curiosity??.5),kindness:clamp(traits.empathy??.5),creativity:clamp(traits.creativity??.5),independence:clamp(traits.confidence??.5),patience:clamp(traits.patience??.5)},
+      preferences:{favoriteApps:[],favoriteActions:[],avoidedActions:[]},
+      relationships:{},disposition:dispositionForTraits(traits),longTermSummary:'',lastReasoning:'',lastThoughtAt:0,
+      model:{provider:'server-gateway',status:'local-fallback'}
+    };
+  }
+  function learnFromExperience(agent,event={}) {
+    if(!agent||!agent.profile)return null;
+    const profileValue=agent.profile,traits={...(profileValue.traits||{})},mind={...createMind(agent.id,profileValue),...(profileValue.mind||{})};
+    const kind=String(event.kind||event.memoryType||'observation').toLowerCase();
+    const outcome=String(event.metadata?.outcome||event.outcome||'neutral').toLowerCase();
+    const reward=outcome==='success'?1:outcome==='failure'?-1:.35;
+    const influence=clamp(Number(event.importance)||.3,0,1)*.012*reward;
+    const map={social:['sociability','empathy'],interaction:['sociability','confidence'],creative:['creativity','curiosity'],observation:['curiosity','patience'],milestone:['confidence','patience'],ability:['playfulness','confidence'],important:['patience','empathy']};
+    for(const key of map[kind]||['curiosity']){const prior=Number(traits[key]);traits[key]=clamp((Number.isFinite(prior)?prior:.5)+influence,0,1)}
+    const experience={id:String(event.id||`exp-${Date.now()}`).slice(0,100),kind,text:String(event.text||event.content||'').slice(0,180),at:Number(event.at||event.createdAt)||Date.now(),reward,importance:clamp(Number(event.importance)||.3)};
+    const experiences=[...(Array.isArray(mind.experiences)?mind.experiences:[]),experience].slice(-40);
+    const count=Math.max(0,Number(mind.experienceCount)||0)+1;
+    const favoriteActions={...(mind.preferences?.actionCounts||{})};
+    const associatedAction=String(event.metadata?.action||agent.action||'idle');
+    favoriteActions[associatedAction]=Math.min(1000,(favoriteActions[associatedAction]||0)+1);
+    const values={
+      curiosity:clamp(traits.curiosity??mind.values?.curiosity??.5),kindness:clamp(traits.empathy??mind.values?.kindness??.5),
+      creativity:clamp(traits.creativity??mind.values?.creativity??.5),independence:clamp(traits.confidence??mind.values?.independence??.5),
+      patience:clamp(traits.patience??mind.values?.patience??.5)
+    };
+    mind.experienceCount=count;mind.experiences=experiences;mind.values=values;mind.preferences={...(mind.preferences||{}),actionCounts:favoriteActions};mind.disposition=dispositionForTraits(traits);mind.updatedAt=Date.now();
+    if(count%8===0){
+      const top=Object.entries(favoriteActions).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([name])=>name);
+      mind.longTermSummary=`${count} trải nghiệm; xu hướng hành động thường chọn: ${top.join(', ')||'khám phá'}.`;
+    }
+    agent.profile={...profileValue,traits,mind};return mind;
+  }
+  function normalizeMind(value,characterId,profileValue={}) {
+    const base=createMind(characterId,profileValue),v=value&&typeof value==='object'?value:{};
+    const experiences=Array.isArray(v.experiences)?v.experiences.slice(-40).map(e=>({id:String(e.id||''),kind:String(e.kind||'event').slice(0,30),text:String(e.text||'').slice(0,180),at:Number(e.at)||Date.now(),reward:clamp(e.reward??0,-1,1),importance:clamp(e.importance??.3)})):[];
+    return {...base,...v,version:1,id:base.id,characterId:String(characterId||base.characterId),seed:Number(v.seed)||base.seed,
+      experienceCount:Math.max(experiences.length,Math.floor(Number(v.experienceCount)||0)),experiences,
+      values:{...base.values,...Object.fromEntries(Object.entries(v.values||{}).map(([k,n])=>[k,clamp(n)]))},
+      preferences:v.preferences&&typeof v.preferences==='object'?v.preferences:base.preferences,
+      relationships:v.relationships&&typeof v.relationships==='object'?v.relationships:{},disposition:String(v.disposition||base.disposition).slice(0,60),
+      longTermSummary:String(v.longTermSummary||'').slice(0,1000),lastReasoning:String(v.lastReasoning||'').slice(0,400),
+      model:{provider:'server-gateway',status:['connected','local-fallback','unavailable'].includes(v.model?.status)?v.model.status:'local-fallback'}
+    };
+  }
+  window.XPAI=Object.freeze({PERSONALITIES,ABILITIES,TRAITS,NEEDS,DEFAULT_NEEDS,hash,profile,decide,normalizeNeeds,decayNeeds,emotion,retrieveMemories,createMind,learnFromExperience,normalizeMind,dispositionForTraits});
 })();

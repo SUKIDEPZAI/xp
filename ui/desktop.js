@@ -3,7 +3,7 @@ const $=s=>document.querySelector(s);
 let fs,bin;try{fs=JSON.parse(localStorage.xpfs);bin=JSON.parse(localStorage.xpbin)}catch(e){}
 fs=fs||{'Chào mừng.txt':'Chào mừng đến Windows XP bản web!\nMở Paint, Notepad, Minesweeper... từ menu Start.\nMở "Máy tính của tôi" > chọn ổ đĩa để duyệt thư mục thật trên máy.'};bin=bin||[];
 const sv=()=>{try{localStorage.xpfs=JSON.stringify(fs);localStorage.xpbin=JSON.stringify(bin)}catch(e){}};
-const btn=(bar,l,f)=>{const k=document.createElement('button');k.textContent=l;k.onclick=f;bar.append(k);return k};
+const btn=(bar,l,f)=>{const k=document.createElement('button');k.textContent=l;k.onclick=event=>{window.XPSounds?.play?.();return f?.(event)};bar.append(k);return k};
 const pick=(acc,cb,dir)=>{const i=document.createElement('input');i.type='file';i.accept=acc;if(dir){i.webkitdirectory=true;i.multiple=true}i.onchange=()=>cb(i.files);i.click()};
 const dl=(blob,n)=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=n;a.click()};
 const S=b=>`<svg viewBox="0 0 32 32">${b}</svg>`;
@@ -24,7 +24,7 @@ ie:S(`<circle cx=16 cy=16 r=11 fill="#2d8ceb"/><text x=9 y=23 font-size=20 font-
 wmp:S(`<circle cx=16 cy=16 r=13 fill="#f58a1f"/><circle cx=16 cy=16 r=10 fill="#2a6fd6"/><path d="M13 10l9 6-9 6z" fill="#fff"/>`)};
 I.real=I.drive;
 let desktopLayout={};try{desktopLayout=JSON.parse(localStorage.getItem('xp-icon-layout')||'{}')}catch{}
-try{const saved=JSON.parse(localStorage.getItem('xp-settings')||'{}');document.body.classList.remove('xp-theme-olive','xp-theme-silver','xp-theme-classic','xp-wallpaper-night');if(saved.theme==='olive')document.body.classList.add('xp-theme-olive');if(saved.theme==='silver')document.body.classList.add('xp-theme-silver');if(saved.theme==='classic')document.body.classList.add('xp-theme-classic');if(saved.wallpaper==='night')document.body.classList.add('xp-wallpaper-night')}catch{}
+try{const saved=JSON.parse(localStorage.getItem('xp-settings')||'{}');document.body.classList.remove('xp-theme-olive','xp-theme-silver','xp-theme-classic','xp-wallpaper-night','xp-pointer-precision');if(saved.theme==='olive')document.body.classList.add('xp-theme-olive');if(saved.theme==='silver')document.body.classList.add('xp-theme-silver');if(saved.theme==='classic')document.body.classList.add('xp-theme-classic');if(saved.wallpaper==='night')document.body.classList.add('xp-wallpaper-night');if(saved.pointer==='precision')document.body.classList.add('xp-pointer-precision');if(saved.taskbarLocked)document.body.classList.add('taskbar-locked');if(saved.showIcons===false)document.getElementById('icons').style.display='none';if(saved.showQuickLaunch===false)document.getElementById('quick-launch').style.display='none'}catch{}
 function touchDesktopSettings(){try{const settings=JSON.parse(localStorage.getItem('xp-settings')||'{}');settings.updatedAt=Date.now();localStorage.setItem('xp-settings',JSON.stringify(settings))}catch{}}
 function saveIconLayout(icon){
  const key=icon.dataset.iconId||icon.dataset.appId;if(!key)return;
@@ -127,84 +127,101 @@ function notepad(b,f,record){
 
 /* Paint — canvas tools with undo/redo and clipboard image support */
 function paint(b,f,record){
- b.innerHTML=`<div class=bar></div><div class=cv><canvas width=700 height=460 style="background:#fff;cursor:crosshair"></canvas></div><div class=bar></div>`;
+ b.innerHTML=`<div class=bar></div><div class=cv><canvas width=700 height=460 style="display:block;background:#fff;cursor:crosshair"></canvas></div><div class=bar></div>`;
  const [tb,cv,pl]=b.children,c=cv.firstChild,x=c.getContext('2d');
- let tool='pen',col='#000000',sz=3,d,s,p0,U=[],R=[],selection=null;
+ cv.style.position='relative';
+ const draft=document.createElement('canvas');draft.className='stickman-draft-layer';draft.width=c.width;draft.height=c.height;
+ Object.assign(draft.style,{position:'absolute',left:'3px',top:'3px',pointerEvents:'none',zIndex:'2'});cv.append(draft);
+ const dx=draft.getContext('2d');
+ let tool='pen',col='#000000',sz=3,d=null,s,p0,U=[],R=[],selection=null,stickmanMode=false,activeStroke=null,draftStrokes=[];
  x.fillStyle='#fff';x.fillRect(0,0,700,460);
+ const status=document.createElement('small');status.className='paint-mode-status';status.style.cssText='display:block;padding:3px 7px;color:#30496c;background:#f4f3ee;border-bottom:1px solid #aca899';status.textContent='Paint — tự do vẽ và chỉnh sửa ảnh.';b.insertBefore(status,cv);
  const snapshot=()=>{U.push(x.getImageData(0,0,c.width,c.height));if(U.length>40)U.shift();R=[]};
  const undo=()=>{if(!U.length)return;R.push(x.getImageData(0,0,c.width,c.height));x.putImageData(U.pop(),0,0)};
  const redo=()=>{if(!R.length)return;U.push(x.getImageData(0,0,c.width,c.height));x.putImageData(R.pop(),0,0)};
- [['Pencil','pen'],['Brush','brush'],['Eraser','eraser'],['Line','line'],['Rectangle','rect'],['Fill','fill'],['Circle','ellipse'],['Spray','spray']].forEach(([i,t])=>btn(tb,i,()=>tool=t).title=t);
+ [['Pencil','pen'],['Brush','brush'],['Eraser','eraser'],['Line','line'],['Rectangle','rect'],['Fill','fill'],['Circle','ellipse'],['Spray','spray']].forEach(([i,t])=>btn(tb,i,()=>{if(!stickmanMode)tool=t}).title=t);
  const se=document.createElement('select');[1,3,6,12].forEach(v=>se.add(new Option(v+'px',v,v===3,v===3)));se.onchange=()=>sz=+se.value;tb.append(se);
  const colpick=document.createElement('input');colpick.type='color';colpick.value=col;colpick.title='Color Picker';colpick.oninput=()=>col=colpick.value;tb.append(colpick);
  btn(tb,'↶ Undo',undo);btn(tb,'↷ Redo',redo);
- btn(tb,'Xóa hết',()=>{snapshot();x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)});
- btn(tb,'Resize Canvas',()=>{const dimensions=prompt('Canvas size (width,height):',`${c.width},${c.height}`);if(!dimensions)return;const [w,h]=dimensions.split(/[x, ]+/).map(Number);if(!Number.isInteger(w)||!Number.isInteger(h)||w<64||h<64||w>2048||h>2048){alert('Choose width and height between 64 and 2048 pixels.');return}const copy=document.createElement('canvas');copy.width=c.width;copy.height=c.height;copy.getContext('2d').drawImage(c,0,0);c.width=w;c.height=h;x.fillStyle='#fff';x.fillRect(0,0,w,h);x.drawImage(copy,0,0,w,h);U=[x.getImageData(0,0,w,h)];R=[]});
- btn(tb,'Mở ảnh',()=>pick('image/*',l=>load(l[0])));
- btn(tb,'Tạo Stickman',()=>createStickman({canvas:c,snapshot,addToCanvas}));
+ btn(tb,'Xóa hết',()=>{if(stickmanMode){cancelStickmanMode();return}snapshot();x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)});
+ btn(tb,'Resize Canvas',()=>{if(stickmanMode){alert('Hãy hoàn tất hoặc hủy chế độ vẽ Stickman trước khi đổi kích thước canvas.');return}const dimensions=prompt('Canvas size (width,height):',`${c.width},${c.height}`);if(!dimensions)return;const [w,h]=dimensions.split(/[x, ]+/).map(Number);if(!Number.isInteger(w)||!Number.isInteger(h)||w<64||h<64||w>2048||h>2048){alert('Choose width and height between 64 and 2048 pixels.');return}const copy=document.createElement('canvas');copy.width=c.width;copy.height=c.height;copy.getContext('2d').drawImage(c,0,0);c.width=w;c.height=h;draft.width=w;draft.height=h;x.fillStyle='#fff';x.fillRect(0,0,w,h);x.drawImage(copy,0,0,w,h);U=[x.getImageData(0,0,w,h)];R=[]});
+ btn(tb,'Mở ảnh',()=>{if(stickmanMode){alert('Hãy hoàn tất hoặc hủy chế độ vẽ Stickman trước khi mở ảnh.');return}pick('image/*',l=>load(l[0]))});
+ const modeButton=btn(tb,'Chế độ vẽ Stickman',startStickmanMode);
+ const finishButton=btn(tb,'Hoàn tất & Tự làm đẹp',finishStickmanDrawing);finishButton.disabled=true;
+ const cancelButton=btn(tb,'Hủy vẽ',cancelStickmanMode);cancelButton.disabled=true;
  const editSelect=document.createElement('select');editSelect.title='Chỉnh ngoại hình Stickman';
- const refreshEditOptions=()=>{const selected=editSelect.value;editSelect.replaceChildren(new Option('Chỉnh Stickman…',''));for(const person of XPStickman.list())editSelect.add(new Option(person.name,person.id));if([...editSelect.options].some(option=>option.value===selected))editSelect.value=selected};
+ const refreshEditOptions=()=>{const selected=editSelect.value;editSelect.replaceChildren(new Option('Chỉnh ngoại hình…',''));for(const person of XPStickman.list())editSelect.add(new Option(person.name,person.id));if([...editSelect.options].some(option=>option.value===selected))editSelect.value=selected};
  refreshEditOptions();
- editSelect.onchange=()=>{const id=editSelect.value;if(id)createStickman({canvas:c,snapshot,addToCanvas,character:XPStickman.get(id)});editSelect.value=''};
+ editSelect.onchange=()=>{const id=editSelect.value;if(id){if(stickmanMode)cancelStickmanMode();createStickman({canvas:c,snapshot,addToCanvas,character:XPStickman.get(id)})}editSelect.value=''};
  tb.append(editSelect);
  const offCreated=XPBus.on('stickman:created',refreshEditOptions),offLoaded=XPBus.on('stickman:loaded',refreshEditOptions);
  btn(tb,'Lưu PNG',exportPNG);
  '#000000,#808080,#800000,#808000,#008000,#008080,#000080,#800080,#ffffff,#c0c0c0,#ff0000,#ffff00,#00ff00,#00ffff,#0000ff,#ff00ff'.split(',').forEach(k=>{const e=btn(pl,'',()=>{col=k;colpick.value=k});e.className='sw';e.style.background=k});
- function load(fl){if(!fl)return;const im=new Image();im.onload=()=>{snapshot();c.width=im.width;c.height=im.height;x.drawImage(im,0,0);URL.revokeObjectURL(im.src)};im.src=URL.createObjectURL(fl)}
+ function load(fl){if(!fl)return;const im=new Image();im.onload=()=>{snapshot();c.width=im.width;c.height=im.height;draft.width=im.width;draft.height=im.height;x.drawImage(im,0,0);URL.revokeObjectURL(im.src)};im.src=URL.createObjectURL(fl)}
  function exportPNG(){c.toBlob(bl=>{if(bl)dl(bl,'paint.png')},'image/png')}
  async function copy(){
-  try{
-   const blob=await new Promise(resolve=>c.toBlob(resolve,'image/png'));
-   if(navigator.clipboard?.write&&window.ClipboardItem)await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
-   else exportPNG();
-  }catch(error){console.warn(error);exportPNG()}
+  try{const blob=await new Promise(resolve=>c.toBlob(resolve,'image/png'));if(navigator.clipboard?.write&&window.ClipboardItem)await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);else exportPNG()}
+  catch(error){console.warn(error);exportPNG()}
  }
  async function paste(){
+  try{if(!navigator.clipboard?.read)return;const items=await navigator.clipboard.read();for(const item of items){const type=item.types.find(t=>t.startsWith('image/'));if(!type)continue;const blob=await item.getType(type),im=await createImageBitmap(blob);snapshot();x.drawImage(im,0,0);return}}
+  catch(error){alert('Không thể đọc ảnh từ clipboard.')}
+ }
+ function addToCanvas(agent){const px=Math.max(42,Math.min(c.width-42,c.width/2)),py=Math.max(90,Math.min(c.height-16,c.height*.76));XPAnimation.draw(x,px,py,XPAnimation.poseFor('idle',0),agent.color,1.45,{},agent.profile?.appearance);XPBus.emit('desktop:event',{kind:'paint-draw',source:'stickman-creator',characterId:agent.id})}
+ function startStickmanMode(){
+  if(stickmanMode)return;stickmanMode=true;draftStrokes=[];activeStroke=null;dx.clearRect(0,0,draft.width,draft.height);modeButton.disabled=true;finishButton.disabled=false;cancelButton.disabled=false;
+  status.textContent='Chế độ vẽ Stickman: chỉ các nét vẽ mới trên lớp riêng sẽ được làm đẹp. Ảnh đang mở không bị đọc hoặc thay đổi.';c.style.cursor='crosshair';
+ }
+ function cancelStickmanMode(){
+  if(!stickmanMode)return;stickmanMode=false;activeStroke=null;draftStrokes=[];dx.clearRect(0,0,draft.width,draft.height);modeButton.disabled=false;finishButton.disabled=true;cancelButton.disabled=true;
+  status.textContent='Đã hủy bản vẽ Stickman. Ảnh Paint và các nét cũ được giữ nguyên.';c.style.cursor='crosshair';
+ }
+ async function finishStickmanDrawing(){
+  if(!stickmanMode)return;
+  if(activeStroke){draftStrokes.push(activeStroke);activeStroke=null}
+  let model;
+  try{model=XPStickmanDrawing.beautify(draftStrokes,c.width,c.height)}catch(error){status.textContent=error.message;return}
+  const suggested=`Stickman ${XPStickman.list().length+1}`,name=prompt('Tên cho Stickman mới:',suggested);if(name===null)return;
+  finishButton.disabled=true;status.textContent='Đang làm mượt nét vẽ, tạo ngoại hình và cấp một trí tuệ riêng…';
   try{
-   if(!navigator.clipboard?.read)return;
-   const items=await navigator.clipboard.read();
-   for(const item of items){const type=item.types.find(t=>t.startsWith('image/'));if(!type)continue;
-    const blob=await item.getType(type),im=await createImageBitmap(blob);snapshot();x.drawImage(im,0,0);return}
-  }catch(error){alert('Không thể đọc ảnh từ clipboard.')}
+   const seedName=String(name||suggested).trim().slice(0,32)||suggested,color=model.strokes[0]?.color||'#202020',id=`drawn-${Date.now()}-${Math.random().toString(16).slice(2,8)}`;
+   const appearance=XPStickmanAppearance.refine(XPStickmanAppearance.create(id,color,'Curious'),{seed:id,personality:'Curious',primaryColor:color});
+   const composite=document.createElement('canvas');composite.width=c.width;composite.height=c.height;XPStickmanDrawing.draw(composite.getContext('2d'),model);
+   const agent=await XPStickman.spawn({name:seedName,color,personality:'Curious',appearance});
+   snapshot();x.drawImage(composite,0,0);
+   try{const document=XPStickmanDrawing.toDocument(model,{name:`${seedName} — Bản vẽ gốc`,characterId:agent.id,width:c.width,height:c.height});const saved=await XPDrawing.save(document);await XPStickman.attachDrawing?.(agent.id,saved.id)}
+   catch(saveError){console.warn('Không lưu được vector sketch',saveError);status.textContent='Đã tạo Stickman; bản vẽ vector chưa lưu được.'}
+   XPBus.emit('desktop:event',{kind:'paint-draw',tool:'stickman-finish',characterId:agent.id});
+   stickmanMode=false;activeStroke=null;draftStrokes=[];dx.clearRect(0,0,draft.width,draft.height);modeButton.disabled=false;finishButton.disabled=true;cancelButton.disabled=true;c.style.cursor='crosshair';
+   status.textContent=`Đã hoàn tất ${agent.name}. Nét vẽ đã được làm mượt và hồ sơ ngoại hình được tối ưu tự động.`;showStickmanProfile(agent.id);refreshEditOptions();
+  }catch(error){finishButton.disabled=false;status.textContent=`Chưa thể tạo Stickman: ${error.message}`}
  }
- function addToCanvas(agent){
-  const px=Math.max(42,Math.min(c.width-42,c.width/2));
-  const py=Math.max(90,Math.min(c.height-16,c.height*.76));
-  XPAnimation.draw(x,px,py,XPAnimation.poseFor('idle',0),agent.color,1.45,{},agent.profile?.appearance);
-  XPBus.emit('desktop:event',{kind:'paint-draw',source:'stickman-creator',characterId:agent.id});
- }
- const actions={undo,redo,copy,cut:async()=>{await copy();snapshot();x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)},paste,selectAll:()=>{selection={x:0,y:0,w:c.width,h:c.height};x.save();x.strokeStyle='#1764c0';x.setLineDash([5,4]);x.strokeRect(1,1,c.width-2,c.height-2);x.restore()},createStickman:(characterId=null)=>createStickman({canvas:c,snapshot,addToCanvas,character:characterId?XPStickman.get(characterId):null}),editStickman:characterId=>createStickman({canvas:c,snapshot,addToCanvas,character:XPStickman.get(characterId)}),export:exportPNG};
+ const actions={undo,redo,copy,cut:async()=>{await copy();snapshot();x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)},paste,selectAll:()=>{selection={x:0,y:0,w:c.width,h:c.height};x.save();x.strokeStyle='#1764c0';x.setLineDash([5,4]);x.strokeRect(1,1,c.width-2,c.height-2);x.restore()},createStickman:(characterId=null)=>characterId?createStickman({canvas:c,snapshot,addToCanvas,character:XPStickman.get(characterId)}):startStickmanMode(),startStickmanMode,editStickman:characterId=>createStickman({canvas:c,snapshot,addToCanvas,character:XPStickman.get(characterId)}),export:exportPNG};
  window.XPPaint=window.XPPaint||{};window.XPPaint[record.id]=actions;
- record.cleanup=()=>{delete window.XPPaint[record.id];offCreated();offLoaded()};
+ record.cleanup=()=>{if(stickmanMode)cancelStickmanMode();delete window.XPPaint[record.id];offCreated();offLoaded()};
  function pos(e){const r=c.getBoundingClientRect();return[(e.clientX-r.left)*c.width/r.width,(e.clientY-r.top)*c.height/r.height]}
  function fill(sx,sy){
-  const im=x.getImageData(0,0,c.width,c.height),q=im.data,W=c.width,H=c.height,h=parseInt(col.slice(1),16),R=h>>16,G=h>>8&255,B=h&255,i0=(sy*W+sx)*4,tr=q[i0],tg=q[i0+1],tbb=q[i0+2];
-  if(tr===R&&tg===G&&tbb===B)return;
-  const stack=[[sx,sy]];
-  while(stack.length){
-   const [a,e]=stack.pop();if(a<0||e<0||a>=W||e>=H)continue;
-   const i=(e*W+a)*4;if(q[i]!==tr||q[i+1]!==tg||q[i+2]!==tbb)continue;
-   q[i]=R;q[i+1]=G;q[i+2]=B;stack.push([a+1,e],[a-1,e],[a,e+1],[a,e-1]);
-  }x.putImageData(im,0,0);
+  const im=x.getImageData(0,0,c.width,c.height),q=im.data,W=c.width,H=c.height,h=parseInt(col.slice(1),16),R=h>>16,G=h>>8&255,B=h&255,i0=(sy*W+sx)*4,tr=q[i0],tg=q[i0+1],tbb=q[i0+2];if(tr===R&&tg===G&&tbb===B)return;const stack=[[sx,sy]];
+  while(stack.length){const [a,e]=stack.pop();if(a<0||e<0||a>=W||e>=H)continue;const i=(e*W+a)*4;if(q[i]!==tr||q[i+1]!==tg||q[i+2]!==tbb)continue;q[i]=R;q[i+1]=G;q[i+2]=B;stack.push([a+1,e],[a-1,e],[a,e+1],[a,e-1])}x.putImageData(im,0,0);
  }
  c.onpointerdown=e=>{
   const [X,Y]=pos(e);p0=[X,Y];
+  if(stickmanMode){activeStroke={id:`stroke-${Date.now()}-${draftStrokes.length}`,points:[{x:X,y:Y}],color:col,width:sz};c.setPointerCapture(e.pointerId);dx.strokeStyle=col;dx.lineWidth=sz;dx.lineCap='round';dx.beginPath();dx.moveTo(X,Y);dx.lineTo(X+.1,Y+.1);dx.stroke();return}
   if(tool==='fill'){snapshot();fill(X|0,Y|0);XPBus.emit('desktop:event',{kind:'paint-draw',tool,appId:'paint'});return}
-  snapshot();d=1;s=x.getImageData(0,0,c.width,c.height);c.setPointerCapture(e.pointerId);
-  x.lineCap='round';x.lineWidth=tool==='eraser'?sz*4:sz;x.strokeStyle=tool==='eraser'?'#fff':col;
-  x.beginPath();x.moveTo(X,Y);x.lineTo(X+.1,Y);x.stroke();x.beginPath();x.moveTo(X,Y);
+  snapshot();d=1;s=x.getImageData(0,0,c.width,c.height);c.setPointerCapture(e.pointerId);x.lineCap='round';x.lineWidth=tool==='eraser'?sz*4:sz;x.strokeStyle=tool==='eraser'?'#fff':col;x.beginPath();x.moveTo(X,Y);x.lineTo(X+.1,Y);x.stroke();x.beginPath();x.moveTo(X,Y);
  };
  c.onpointermove=e=>{
-  if(!d)return;const [X,Y]=pos(e);
+  const [X,Y]=pos(e);
+  if(stickmanMode&&activeStroke){const last=activeStroke.points.at(-1);if(Math.hypot(X-last.x,Y-last.y)>=1){activeStroke.points.push({x:X,y:Y});dx.lineTo(X,Y);dx.stroke();dx.beginPath();dx.moveTo(X,Y)}return}
+  if(!d)return;
   if(tool==='pen'||tool==='brush'||tool==='eraser'){x.lineTo(X,Y);x.stroke();x.beginPath();x.moveTo(X,Y)}
   else if(tool==='spray'){x.fillStyle=col;for(let i=0;i<14;i++)x.fillRect(X+(Math.random()-.5)*sz*6,Y+(Math.random()-.5)*sz*6,1,1)}
   else{x.putImageData(s,0,0);x.beginPath();if(tool==='line'){x.moveTo(...p0);x.lineTo(X,Y)}else if(tool==='ellipse')x.ellipse((p0[0]+X)/2,(p0[1]+Y)/2,Math.abs(X-p0[0])/2,Math.abs(Y-p0[1])/2,0,0,7);else x.rect(p0[0],p0[1],X-p0[0],Y-p0[1]);x.stroke()}
  };
- c.onpointerup=()=>{if(d)XPBus.emit('desktop:event',{kind:'paint-draw',tool,appId:'paint'});d=0};
- c.onpointercancel=()=>{d=0};
+ c.onpointerup=()=>{if(stickmanMode){if(activeStroke){draftStrokes.push(activeStroke);activeStroke=null;status.textContent=`Đã ghi ${draftStrokes.length} nét. Tiếp tục vẽ hoặc chọn Hoàn tất & Tự làm đẹp.`}return}if(d)XPBus.emit('desktop:event',{kind:'paint-draw',tool,appId:'paint'});d=null};
+ c.onpointercancel=()=>{d=null;if(stickmanMode)activeStroke=null};
  if(f)load(f);
 }
-
 /* Calculator — safe arithmetic parser, no eval/Function */
 function parseArithmetic(source){
  const tokens=source.match(/\d+(?:\.\d+)?|[()+\-*/]/g)||[];
@@ -331,7 +348,7 @@ function ie(b,_arg,record){
   const item=list[Number(choice)-1];if(item)command('navigate',{url:item.url});
  });
  btn(toolbar,'Tab mới',()=>command('new-tab'));
- btn(toolbar,'Mở ngoài',()=>{const current=state.tabs.find(t=>t.id===state.activeTabId);if(current?.url&&/^https?:\/\//i.test(current.url))window.open(current.url,'_blank','noopener,noreferrer')}).title='Mở trang trong tab trình duyệt mới';
+ btn(toolbar,'Mở ngoài',()=>{const current=state.tabs.find(t=>t.id===state.activeTabId);if(current?.url&&/^https?:\/\//i.test(current.url)){const opened=window.open(current.url,'_blank','noopener,noreferrer');if(!opened)status.textContent='Popup bị chặn. Hãy cho phép mở tab mới trên trình duyệt.'}}).title='Mở trang trong tab trình duyệt thật, ngoài iframe';
  btn(toolbar,'Trang chủ…',async()=>{
   const store=await command('get-store');const home=prompt('Trang chủ (HTTP/HTTPS):',store.home||'https://www.google.com');
   if(home)command('settings',{home,engine:store.engine});
@@ -352,7 +369,7 @@ function ie(b,_arg,record){
   star.textContent=saved?'★':'☆';
   back.disabled=!current?.canBack;forward.disabled=!current?.canForward;
   reload.textContent=current?.loading?'×':'⟳';
-  status.textContent=current?.loading?'Đang tải trang…':(current?.url||'Tab mới');
+  status.textContent=current?.loading?'Đang tải trang…':(current?.url||'Tab mới')+' · Website chặn iframe? Chọn Mở ngoài.';
  }
  const off=window.xpHost.browser.onState(render);
  record.cleanup=()=>off();
@@ -368,7 +385,7 @@ function media(b,f){
 }
 /* Stickman manager — algorithmic simulation with IndexedDB-backed memories */
 function stickmanApp(b,_arg,record){
- b.innerHTML=`<div class="bar"><button data-new>Tạo Stickman</button><button data-export>Xuất dữ liệu JSON</button><button data-import>Nhập dữ liệu JSON</button><button data-refresh>Làm mới</button></div><div class="stickman-manager"></div>`;
+ b.innerHTML=`<div class="bar"><button data-new>Mở Paint · Vẽ Stickman</button><button data-export>Xuất dữ liệu JSON</button><button data-import>Nhập dữ liệu JSON</button><button data-refresh>Làm mới</button></div><div class="stickman-manager"></div>`;
  const list=b.querySelector('.stickman-manager');
  const refresh=()=>{
   list.replaceChildren();
@@ -379,7 +396,7 @@ function stickmanApp(b,_arg,record){
    const dot=document.createElement('i');dot.style.background=a.color;
    const info=document.createElement('div');info.className='stickman-info';
    const name=document.createElement('b');name.textContent=a.name;
-   const sub=document.createElement('small');sub.textContent=`${a.personality} · ${a.state} · ${a.memoryCount} ký ức`;
+   const sub=document.createElement('small');sub.textContent=`${a.personality} · ${a.state} · ${a.memoryCount} ký ức · AI: ${a.profile?.mind?.model?.status==='connected'?'Online':'Local'}`;
    info.append(name,sub);
    const profile=btn(row,'Hồ sơ',()=>showStickmanProfile(a.id));
    const edit=btn(row,'Ngoại hình',()=>openPaintStickmanCreator(a.id));
@@ -400,14 +417,15 @@ function stickmanApp(b,_arg,record){
  setTimeout(()=>{if(record.el.isConnected)refresh()},300);
 }
 function createStickman({canvas=null,snapshot=null,addToCanvas=null,character=null}={}){
+ if(!character){alert('Hãy bật Chế độ vẽ Stickman trong Paint để vẽ nhân vật.');return}
  const appearanceApi=window.XPStickmanAppearance;
  if(!appearanceApi){alert('Stickman Appearance chưa sẵn sàng.');return}
  const shade=document.createElement('div');shade.className='xp-dialog-shade';
  const form=document.createElement('form');form.className='xp-dialog xp-stickman-creator';
- const title=document.createElement('h3');title.textContent=character?'Edit Stickman Appearance':'Create a Stickman in Paint';
+ const title=document.createElement('h3');title.textContent='Edit Stickman Appearance';
  const layout=document.createElement('div');layout.className='stickman-creator-layout';
  const controls=document.createElement('div');controls.className='stickman-creator-controls';
- const preview=document.createElement('canvas');preview.width=220;preview.height=230;preview.className='stickman-creator-preview';
+ const preview=document.createElement('canvas');preview.width=260;preview.height=250;preview.className='stickman-creator-preview';
  const field=(label,control)=>{const wrap=document.createElement('label');wrap.textContent=label;wrap.append(control);controls.append(wrap);return control};
  const name=document.createElement('input');name.required=true;name.maxLength=32;name.value=character?.name||'Shadow';field('Tên nhân vật',name);
  const personality=document.createElement('select');XPAI.PERSONALITIES.forEach(value=>personality.add(new Option(value,value)));personality.value=character?.personality||'Curious';field('Tính cách',personality);
@@ -427,17 +445,17 @@ function createStickman({canvas=null,snapshot=null,addToCanvas=null,character=nu
  const previewPanel=document.createElement('div');previewPanel.className='stickman-creator-preview-panel';
  const previewLabel=document.createElement('b');previewLabel.textContent='Live Preview';const previewNote=document.createElement('small');previewNote.textContent='Tối ưu chỉ tác động lên hồ sơ ngoại hình Stickman, không quét hoặc chỉnh sửa ảnh Paint.';previewPanel.append(previewLabel,preview,previewNote);
  layout.append(controls,previewPanel);
- const status=document.createElement('p');status.className='creator-status';status.textContent=character?'Chỉnh sửa hồ sơ nhân vật hiện có.':'Tạo nhân vật dạng vector, có ngoại hình riêng và animation tự động.';
+ const status=document.createElement('p');status.className='creator-status';status.textContent='Chỉnh sửa ngoại hình riêng của nhân vật. Bộ não và ký ức không bị đặt lại.';
  const actions=document.createElement('div');actions.className='dialog-actions';
  const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Hủy';cancel.onclick=()=>shade.remove();
  const optimize=document.createElement('button');optimize.type='button';optimize.textContent='✨ Tối ưu ngoại hình';
- const save=document.createElement('button');save.type='submit';save.textContent=character?'Lưu ngoại hình':'Tạo Stickman';
+ const save=document.createElement('button');save.type='submit';save.textContent='Lưu ngoại hình';
  actions.append(cancel,optimize,save);form.append(title,layout,status,actions);shade.append(form);document.body.append(shade);
  const readLook=()=>appearanceApi.normalize({headShape:headShape.value,skinTone:skin.value,hairStyle:hairStyle.value,hairColor:hairColor.value,outfitStyle:outfitStyle.value,outfitColor:outfitColor.value,accessory:accessory.value,expression:expression.value,accentColor:accentColor.value},lineColor.value);
- const paintLook=()=>{look=readLook();const ctx=preview.getContext('2d');ctx.clearRect(0,0,preview.width,preview.height);ctx.fillStyle='#f5f8fc';ctx.fillRect(0,0,preview.width,preview.height);ctx.strokeStyle='#d7e2f0';ctx.strokeRect(8,8,preview.width-16,preview.height-16);XPAnimation.draw(ctx,preview.width/2,190,XPAnimation.poseFor('idle',0),lineColor.value,1.8,{},look);ctx.fillStyle='#52657b';ctx.font='11px Tahoma';ctx.textAlign='center';ctx.fillText(name.value||'Stickman',preview.width/2,22)};
+ const paintLook=()=>{look=readLook();const ctx=preview.getContext('2d');ctx.clearRect(0,0,preview.width,preview.height);ctx.fillStyle='#f5f8fc';ctx.fillRect(0,0,preview.width,preview.height);ctx.strokeStyle='#d7e2f0';ctx.strokeRect(8,8,preview.width-16,preview.height-16);XPAnimation.draw(ctx,preview.width/2,195,XPAnimation.poseFor('idle',0),lineColor.value,2.55,{},look);ctx.fillStyle='#52657b';ctx.font='11px Tahoma';ctx.textAlign='center';ctx.fillText(name.value||'Stickman',preview.width/2,22)};
  [name,personality,lineColor,skin,hairStyle,hairColor,outfitStyle,outfitColor,accessory,expression,headShape,accentColor].forEach(control=>control.addEventListener('input',paintLook));
  optimize.onclick=()=>{look=appearanceApi.refine(readLook(),{seed:character?.id||name.value,personality:personality.value,primaryColor:lineColor.value});skin.value=look.skinTone;hairStyle.value=look.hairStyle;hairColor.value=look.hairColor;outfitStyle.value=look.outfitStyle;outfitColor.value=look.outfitColor;accessory.value=look.accessory;expression.value=look.expression;headShape.value=look.headShape;accentColor.value=look.accentColor;paintLook();status.textContent='Đã cân chỉnh bảng màu, kiểu tóc, trang phục và phụ kiện cho riêng Stickman.'};
- form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{const data={color:lineColor.value,appearance:readLook()};if(character){await XPStickman.updateAppearance(character.id,data);status.textContent='Đã lưu ngoại hình nhân vật.';shade.remove();}else{const agent=await XPStickman.spawn({name:name.value,color:data.color,personality:personality.value,appearance:data.appearance});if(canvas&&addToCanvas){snapshot?.();addToCanvas(agent)}shade.remove();showStickmanProfile(agent.id)}}catch(error){save.disabled=false;status.textContent=`Không thể lưu Stickman: ${error.message}`} };
+ form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{const data={color:lineColor.value,appearance:readLook(),name:name.value,personality:personality.value};await XPStickman.updateAppearance(character.id,data);status.textContent='Đã lưu ngoại hình nhân vật; ký ức và trí tuệ được giữ nguyên.';shade.remove()}catch(error){save.disabled=false;status.textContent=`Không thể lưu ngoại hình: ${error.message}`} };
  paintLook();name.focus();
 }
 function openPaintStickmanCreator(characterId=null){
@@ -450,7 +468,7 @@ function previewStickmanAnimation(project,character){
   body.innerHTML='<div class="stickman-animation-preview"><canvas width="460" height="250"></canvas><div class="bar"><button data-play>▶ Play</button><span data-status>Generated animation</span></div></div>';
   const canvas=body.querySelector('canvas'),ctx=canvas.getContext('2d'),play=body.querySelector('[data-play]'),status=body.querySelector('[data-status]');let frame=0,started=0,raf=0,playing=false;
   const appearance=character?.profile?.appearance||project.metadata?.appearance||null,color=character?.color||'#202020';
-  const render=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.strokeStyle='#dce5ef';ctx.strokeRect(8,8,canvas.width-16,canvas.height-16);const value=XPAnimation.interpolate(project,frame);const pose=XPAnimation.poseFor(value.pose,frame*1000/project.fps);XPAnimation.draw(ctx,canvas.width/2+value.x,canvas.height/2+value.y+28,pose,value.color||color,1.65,{},appearance);status.textContent=`${project.fps} FPS · Frame ${Math.round(frame)} / ${project.duration}`};
+  const render=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.strokeStyle='#dce5ef';ctx.strokeRect(8,8,canvas.width-16,canvas.height-16);const value=XPAnimation.interpolate(project,frame);const pose=value.poseData||XPAnimation.poseFor(value.pose,frame*1000/project.fps);XPAnimation.draw(ctx,canvas.width/2+value.x,canvas.height/2+value.y+28,pose,value.color||color,1.65*value.scale,{},appearance);status.textContent=`${project.fps} FPS · Frame ${Math.round(frame)} / ${project.duration}`};
   const stop=()=>{playing=false;if(raf)cancelAnimationFrame(raf);raf=0;play.textContent='▶ Play'};
   play.onclick=()=>{if(playing){stop();return}playing=true;play.textContent='Ⅱ Pause';started=performance.now()-frame*1000/project.fps;const tick=now=>{if(!playing)return;frame=((now-started)*project.fps/1000)%project.duration;render();raf=requestAnimationFrame(tick)};raf=requestAnimationFrame(tick)};
   render();windowRecord.cleanup=stop;
@@ -465,9 +483,10 @@ function showStickmanProfile(id){
  const title=document.createElement('div');const h=document.createElement('h2');h.textContent=a.name;const caption=document.createElement('small');caption.textContent=`${a.personality} · ${a.state} · ${a.action}`;title.append(h,caption);heading.append(avatar,title);body.append(heading);
  const fields=document.createElement('div');fields.className='profile-stats';
  const addStat=(label,value)=>{const item=document.createElement('div');const name=document.createElement('small');name.textContent=label;const strong=document.createElement('b');strong.textContent=String(value);item.append(name,strong);fields.append(item)};
- addStat('Emotion',a.emotion);addStat('Energy',`${Math.round(a.energy*100)}%`);addStat('Memory Count',a.memoryCount);addStat('User Affinity',`${Math.round(a.userAffinity||0)}/100`);addStat('Autonomy',a.autonomy?'Automatic':'Manual');body.append(fields);
+ addStat('Emotion',a.emotion);addStat('Energy',`${Math.round(a.energy*100)}%`);addStat('Memory Count',a.memoryCount);addStat('User Affinity',`${Math.round(a.userAffinity||0)}/100`);addStat('Autonomy',a.autonomy?'Automatic':'Manual');addStat('Bộ não',a.profile?.mind?.model?.status==='connected'?'AI trung tâm':'AI cục bộ / chờ cấu hình');addStat('Trải nghiệm',a.profile?.mind?.experienceCount||0);addStat('Khuynh hướng',a.profile?.mind?.disposition||'Đang hình thành');body.append(fields);
  const addMeters=(headingText,values)=>{const section=document.createElement('section');section.className='profile-section';const h3=document.createElement('h3');h3.textContent=headingText;section.append(h3);for(const [key,value] of Object.entries(values||{})){const row=document.createElement('div');row.className='profile-meter';const label=document.createElement('span');label.textContent=key;const track=document.createElement('div');track.className='profile-meter-track';const fill=document.createElement('i');const amount=Math.max(0,Math.min(1,Number(value)||0));fill.style.width=`${amount*100}%`;track.append(fill);const number=document.createElement('small');number.textContent=`${Math.round(amount*100)}%`;row.append(label,track,number);section.append(row)}body.append(section)};
  addMeters('Personality Traits',a.profile?.traits||{});addMeters('Needs',a.needs||{});
+ const chatSection=document.createElement('section');chatSection.className='profile-section';const chatTitle=document.createElement('h3');chatTitle.textContent='Trò chuyện với trí tuệ riêng';const chatInput=document.createElement('textarea');chatInput.rows=2;chatInput.maxLength=1200;chatInput.placeholder='Nói chuyện với '+a.name+'…';chatInput.className='stickman-chat-input';chatSection.append(chatTitle,chatInput);const chatSend=btn(chatSection,'Gửi tin nhắn',async()=>{const message=chatInput.value.trim();if(!message)return;chatSend.disabled=true;chatTitle.textContent='Bộ não đang xử lý…';try{await XPStickman.chat(id,message);chatInput.value='';chatTitle.textContent='Trò chuyện với trí tuệ riêng';refreshHeader()}catch(error){chatTitle.textContent='AI chưa phản hồi: '+error.message}finally{chatSend.disabled=false}});body.append(chatSection);
  const abilities=document.createElement('section');abilities.className='profile-section';const abilityTitle=document.createElement('h3');abilityTitle.textContent='Special Abilities';abilities.append(abilityTitle);
  (a.profile?.abilities||[]).forEach(ab=>{const p=document.createElement('p');p.textContent=`${ab.name} — ${ab.description} · Cooldown ${ab.cooldown/1000}s`;abilities.append(p)});body.append(abilities);
  const goals=document.createElement('section');goals.className='profile-section';const goalTitle=document.createElement('h3');goalTitle.textContent='Goals';goals.append(goalTitle);
@@ -495,44 +514,56 @@ function showStickmanProfile(id){
 window.showStickmanProfile=showStickmanProfile;
 window.createStickman=()=>openPaintStickmanCreator();
 
+/* Central Stickman AI brain server monitor */
+function brainServerApp(b,_arg,record){
+ b.innerHTML=`<div class="bar"><b>Stickman Central Brain Server</b><button data-refresh>Refresh</button></div><div class="brain-server-panel"><section class="brain-server-status" data-status>Checking central AI service…</section><h3>Independent Stickman minds</h3><div class="brain-server-agents" data-agents></div><p class="brain-server-note">Mỗi Stickman có mind ID, giá trị, sở thích, quan hệ và ký ức riêng. Các agent dùng chung model AI server nhưng có ngữ cảnh độc lập; server kiểm tra JSON đầu ra rồi chuyển kế hoạch khớp tới rig animation. API key không được gửi xuống trình duyệt.</p><p>Để bật model thật, cấu hình AI_API_URL hoặc AI_API_BASE_URL, AI_MODEL và AI_API_KEY trong biến môi trường server. Có thể đặt AI_DATABASE_URLS thành mảng JSON tối đa 8 Neon connection strings để phân shard trí tuệ.</p></div>`;
+ const status=b.querySelector('[data-status]'),list=b.querySelector('[data-agents]');
+ const refresh=async()=>{status.textContent='Đang kiểm tra…';list.replaceChildren();const result=await XPBrain.status();status.textContent=result.configured?`AI model đã cấu hình: ${result.provider} · ${result.model||'model chưa rõ'} · Memory DB: ${result.memoryStore?'đã chọn (kiểm tra kết nối ở lượt AI đầu tiên)':'chưa cấu hình'}`:`AI model chưa được cấu hình (${result.error||'chưa đăng nhập hoặc chưa cấu hình'}). Stickman đang dùng planner cục bộ.`;
+  const people=XPStickman.list();if(!people.length){list.textContent='Chưa có Stickman.';return}
+  for(const person of people){const row=document.createElement('div');row.className='brain-agent-row';const name=document.createElement('b');name.textContent=person.name;const detail=document.createElement('small');detail.textContent=`${person.profile?.mind?.disposition||person.personality} · ${person.profile?.mind?.experienceCount||0} trải nghiệm · ${person.profile?.mind?.model?.status||'local-fallback'}`;row.append(name,detail,btn(row,'Hồ sơ',()=>showStickmanProfile(person.id)));list.append(row)}
+ };
+ b.querySelector('[data-refresh]').onclick=refresh;const off=XPBus.on('stickman:created',refresh);const offMem=XPBus.on('stickman:memory',refresh);record.cleanup=()=>{off();offMem()};refresh();
+}
+
 /* Control Panel, Search and Run utilities */
 function controlPanelApp(b){
- b.innerHTML=`<div class="bar"><b>Thuộc tính hệ thống mô phỏng</b></div><div class="control-panel">
- <section><h3>Themes / Appearance</h3><select data-theme><option value="blue">Windows XP Luna Blue</option><option value="olive">Olive Green</option><option value="silver">Silver</option><option value="classic">Windows Classic</option></select></section>
- <section><h3>Desktop Background</h3><select data-wallpaper><option value="bliss">Bliss Meadow</option><option value="night">Night Sky</option></select></section>
- <section><h3>Screen Resolution</h3><select data-size><option value="1024x768">1024 × 768</option><option value="1280x720">1280 × 720</option><option value="1366x768">1366 × 768</option><option value="1600x900">1600 × 900</option><option value="1920x1080">1920 × 1080</option></select><button data-apply-size>Apply</button><small>Khi chạy web, kích thước làm việc do trình duyệt quản lý; chế độ Electron có thể đổi kích thước cửa sổ.</small></section>
- <section><h3>Screensaver</h3><button data-screensaver>Preview Screensaver</button></section>
- </div>`;
- const theme=b.querySelector('[data-theme]'),wall=b.querySelector('[data-wallpaper]'),size=b.querySelector('[data-size]');
- let settings={theme:'blue',wallpaper:'bliss'};
+ const defaults={theme:'blue',wallpaper:'bliss',showIcons:true,showQuickLaunch:true,showDate:true,taskbarLocked:false,sounds:false,pointer:'arrow'};
+ let settings={...defaults};
  try{settings={...settings,...JSON.parse(localStorage.getItem('xp-settings')||'{}')}}catch{}
+ b.innerHTML=`<div class="bar"><b>Control Panel · Cài đặt Windows XP</b><button data-restore>Khôi phục mặc định</button></div>
+ <div class="control-panel">
+  <section><h3>Display Properties</h3><label>Theme<select data-theme><option value="blue">Windows XP Luna Blue</option><option value="olive">Olive Green</option><option value="silver">Silver</option><option value="classic">Windows Classic</option></select></label><label>Desktop wallpaper<select data-wallpaper><option value="bliss">Bliss Meadow</option><option value="night">Night Sky</option></select></label><button data-saver>Preview Screen Saver</button></section>
+  <section><h3>Taskbar and Start Menu</h3><label><input type="checkbox" data-lock> Lock the Taskbar</label><label><input type="checkbox" data-quick> Show Quick Launch</label><label><input type="checkbox" data-date> Show date below clock</label><small>Taskbar, Start Menu và Quick Launch được lưu vào cài đặt cục bộ.</small></section>
+  <section><h3>Desktop</h3><label><input type="checkbox" data-icons> Show desktop icons</label><button data-arrange>Arrange Icons by Name</button><button data-refresh>Refresh Desktop</button></section>
+  <section><h3>Sounds and Audio Devices</h3><label><input type="checkbox" data-sounds> Enable simulated system sounds</label><button data-test-sound>Test sound</button><small>Âm báo ngắn được tạo trực tiếp trong trình duyệt; không phát âm thanh khi chưa bật.</small></section>
+  <section><h3>Mouse Properties</h3><label>Pointer style<select data-pointer><option value="arrow">Windows arrow</option><option value="precision">Precision</option></select></label><small>Chỉ thay đổi con trỏ trong desktop mô phỏng, không can thiệp hệ điều hành thật.</small></section>
+  <section><h3>System and Display Resolution</h3><label>Resolution<select data-size><option value="1024x768">1024 × 768</option><option value="1280x720">1280 × 720</option><option value="1366x768">1366 × 768</option><option value="1600x900">1600 × 900</option><option value="1920x1080">1920 × 1080</option></select></label><button data-apply-size>Apply Resolution</button><small data-size-note>Trong bản web, hãy thay đổi kích thước cửa sổ trình duyệt. Electron có thể đổi kích thước cửa sổ mô phỏng.</small></section>
+  <section><h3>Date and Time</h3><strong data-clock></strong><small data-date-label></small><button data-time-refresh>Refresh Clock</button></section>
+  <section><h3>Network and Internet</h3><button data-ie>Open Internet Explorer</button><button data-account>Online Account and Sync</button><small>Website chặn iframe cần mở bằng tab trình duyệt thật qua nút Mở ngoài trong Internet Explorer.</small></section>
+ </div>`;
+ const $p=selector=>b.querySelector(selector),theme=$p('[data-theme]'),wall=$p('[data-wallpaper]'),size=$p('[data-size]');
  theme.value=settings.theme;wall.value=settings.wallpaper;
- if(!window.XPPlatform?.canResizeNativeWindow){
-  size.disabled=true;b.querySelector('[data-apply-size]').disabled=true;
-  b.querySelector('[data-size]').closest('section').querySelector('small').textContent='Kích thước cửa sổ do trình duyệt quản lý. Hãy thay đổi kích thước cửa sổ trình duyệt.';
- }
+ $p('[data-lock]').checked=!!settings.taskbarLocked;$p('[data-quick]').checked=settings.showQuickLaunch!==false;
+ $p('[data-date]').checked=settings.showDate!==false;$p('[data-icons]').checked=settings.showIcons!==false;
+ $p('[data-sounds]').checked=!!settings.sounds;$p('[data-pointer]').value=settings.pointer||'arrow';
+ if(!window.XPPlatform?.canResizeNativeWindow){size.disabled=true;$p('[data-apply-size]').disabled=true}
+ const persist=()=>{settings={...settings,theme:theme.value,wallpaper:wall.value,taskbarLocked:$p('[data-lock]').checked,showQuickLaunch:$p('[data-quick]').checked,showDate:$p('[data-date]').checked,showIcons:$p('[data-icons]').checked,sounds:$p('[data-sounds]').checked,pointer:$p('[data-pointer]').value,updatedAt:Date.now()};try{localStorage.setItem('xp-settings',JSON.stringify(settings))}catch{};apply()};
  const apply=()=>{
-  const previousTheme=settings.theme,previousWallpaper=settings.wallpaper;
-  document.body.classList.remove('xp-theme-olive','xp-theme-silver','xp-theme-classic','xp-wallpaper-night');
-  if(theme.value==='olive')document.body.classList.add('xp-theme-olive');
-  if(theme.value==='silver')document.body.classList.add('xp-theme-silver');
-  if(theme.value==='classic')document.body.classList.add('xp-theme-classic');
-  if(wall.value==='night')document.body.classList.add('xp-wallpaper-night');
-  settings={...settings,theme:theme.value,wallpaper:wall.value};
-  if(previousTheme!==theme.value||previousWallpaper!==wall.value||!Number(settings.updatedAt))settings.updatedAt=Date.now();
-  localStorage.setItem('xp-settings',JSON.stringify(settings));
+  document.body.classList.remove('xp-theme-olive','xp-theme-silver','xp-theme-classic','xp-wallpaper-night','xp-pointer-precision');
+  if(settings.theme==='olive')document.body.classList.add('xp-theme-olive');if(settings.theme==='silver')document.body.classList.add('xp-theme-silver');if(settings.theme==='classic')document.body.classList.add('xp-theme-classic');if(settings.wallpaper==='night')document.body.classList.add('xp-wallpaper-night');if(settings.pointer==='precision')document.body.classList.add('xp-pointer-precision');
+  document.body.classList.toggle('taskbar-locked',!!settings.taskbarLocked);
+  $('#icons').style.display=settings.showIcons===false?'none':'';$('#quick-launch').style.display=settings.showQuickLaunch===false?'none':'';$('#clk').classList.toggle('clock-date-hidden',settings.showDate===false);
+  window.XPSounds={enabled:!!settings.sounds,play(){if(!settings.sounds)return;try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const audio=new C(),osc=audio.createOscillator(),gain=audio.createGain();osc.type='sine';osc.frequency.value=660;gain.gain.setValueAtTime(.04,audio.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audio.currentTime+.075);osc.connect(gain);gain.connect(audio.destination);osc.start();osc.stop(audio.currentTime+.08);osc.onended=()=>audio.close()}catch{}}};
  };
- theme.onchange=apply;wall.onchange=apply;apply();
- b.querySelector('[data-apply-size]').onclick=async()=>{
-  const [w,h]=size.value.split('x').map(Number);
-  try{await window.xpHost.window.setSize(w,h)}catch(error){alert('Không đổi được kích thước: '+error.message)}
- };
- b.querySelector('[data-screensaver]').onclick=()=>{
-  const layer=document.createElement('div');layer.className='xp-screensaver';
-  const label=document.createElement('span');label.textContent='Windows XP';layer.append(label);
-  const close=()=>layer.remove();layer.addEventListener('click',close);layer.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
-  document.body.append(layer);layer.tabIndex=0;layer.focus();
- };
+ const refreshClock=()=>{const now=new Date();$p('[data-clock]').textContent=now.toLocaleTimeString('vi-VN');$p('[data-date-label]').textContent=now.toLocaleDateString('vi-VN',{weekday:'long',year:'numeric',month:'long',day:'numeric'})};
+ [theme,wall,$p('[data-lock]'),$p('[data-quick]'),$p('[data-date]'),$p('[data-icons]'),$p('[data-sounds]'),$p('[data-pointer]')].forEach(control=>control.addEventListener('change',persist));
+ $p('[data-restore]').onclick=()=>{settings={...defaults};theme.value=defaults.theme;wall.value=defaults.wallpaper;$p('[data-lock]').checked=false;$p('[data-quick]').checked=true;$p('[data-date]').checked=true;$p('[data-icons]').checked=true;$p('[data-sounds]').checked=false;$p('[data-pointer]').value='arrow';persist();refreshClock()};
+ $p('[data-arrange]').onclick=()=>window.arrangeDesktopIcons?.('name');$p('[data-refresh]').onclick=()=>{window.XPBus?.emit('desktop:event',{kind:'refresh'});refreshClock()};
+ $p('[data-test-sound]').onclick=()=>{if(!settings.sounds)alert('Enable simulated system sounds first.')};
+ $p('[data-time-refresh]').onclick=refreshClock;$p('[data-ie]').onclick=()=>run('ie');$p('[data-account]').onclick=()=>run('account');
+ $p('[data-apply-size]').onclick=async()=>{const [w,h]=size.value.split('x').map(Number);try{await window.xpHost.window.setSize(w,h)}catch(error){alert('Không đổi được kích thước: '+error.message)}};
+ $p('[data-saver]').onclick=()=>{const layer=document.createElement('div');layer.className='xp-screensaver';const label=document.createElement('span');label.textContent='Windows XP';layer.append(label);const close=()=>layer.remove();layer.addEventListener('click',close);layer.addEventListener('keydown',e=>{if(e.key==='Escape')close()});document.body.append(layer);layer.tabIndex=0;layer.focus()};
+ apply();refreshClock();
 }
 function searchApp(b){
  b.innerHTML=`<div class=bar><input class=search-query placeholder="Tìm trong My Documents"><button data-search>Tìm</button></div><div class=lst data-results></div><div class=sb data-count>Nhập tên tệp hoặc nội dung cần tìm.</div>`;
@@ -565,7 +596,7 @@ function helpApp(b){
  <h3>Desktop</h3><p>Nhấp đúp biểu tượng để mở ứng dụng. Kéo biểu tượng để sắp xếp. Chuột phải để mở menu thao tác.</p>
  <h3>Windows</h3><p>Kéo thanh tiêu đề để di chuyển, kéo cạnh/góc để thay đổi kích thước, dùng các nút góc phải để thu nhỏ, phóng to hoặc đóng.</p>
  <h3>Internet Explorer</h3><p>Trong Electron, website chạy bằng WebContentsView cô lập. Khi chạy dạng website, trang được thử nhúng qua iframe sandbox; website chặn nhúng cần dùng nút Mở ngoài. Chỉ HTTP/HTTPS được mở và trang ngoài không được truy cập API nội bộ.</p>
- <h3>Stickman</h3><p>Tạo nhân vật trong Stickman Manager. Mỗi nhân vật có profile, năng lực được tạo bằng seed ổn định và bộ nhớ cục bộ riêng. Đây là mô phỏng hành vi theo thuật toán, không phải ý thức.</p>
+ <h3>Stickman</h3><p>Mở Paint → Chế độ vẽ Stickman, vẽ trên lớp riêng rồi chọn Hoàn tất & Tự làm đẹp. Ảnh đang mở không được đọc hoặc chỉnh sửa. Mỗi nhân vật có mind ID và ký ức riêng; có thể cấu hình model AI server và Neon shard. Đây là agent ảo có bộ nhớ và mô hình ngôn ngữ hỗ trợ, không phải ý thức/con người thật.</p>
  </div>`;
 }
 function runApp(b){
@@ -611,7 +642,8 @@ const A=[
  ['run','Run',S(`<rect x="3" y="6" width="26" height="20" rx="2" fill="#e4edf7" stroke="#456"/><path d="M8 12h16M8 17h10" stroke="#456" stroke-width="2"/>`),360,190,runApp,false],
  ['documents','My Documents',I.folder,620,430,b=>myc(b,'documents'),false],
  ['pictures','My Pictures',I.img,620,430,b=>myc(b,'pictures'),false],
- ['account','Online Account & Sync',I.pc,680,470,accountApp,false]
+ ['account','Online Account & Sync',I.pc,680,470,accountApp,false],
+ ['brain','Stickman Brain Server',I.pc,620,490,brainServerApp]
 ];
 const run=(k,arg)=>{const a=A.find(z=>z[0]===k);if(!a)return null;return openWin(a[1],a[2],a[3],a[4],(bd,el,record)=>a[5](bd,arg,record),k)};
 window.launchApp=run;
@@ -748,5 +780,5 @@ document.querySelectorAll('#quick-launch [data-launch]').forEach(button=>{
 $('#st').onclick=()=>$('#sm').hidden=!$('#sm').hidden;
 document.addEventListener('mousedown',e=>{if(!$('#sm').contains(e.target)&&e.target!=$('#st'))$('#sm').hidden=true;if(!e.target.closest('.ic'))document.querySelectorAll('.ic').forEach(x=>x.classList.remove('s'))});
 $('#offb').onclick=()=>{$('#sm').hidden=true;$('#off').style.display='grid'};$('#off').onclick=()=>$('#off').style.display='none';$('#off').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('#off').style.display='none'}};$('#logoff').onclick=()=>{$('#sm').hidden=true;run('account')};
-const tick=()=>{const now=new Date();$('#clk').textContent=now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});$('#clk').title=now.toLocaleDateString('vi-VN',{weekday:'long',year:'numeric',month:'long',day:'numeric'})};tick();setInterval(tick,10000);
+const tick=()=>{const now=new Date(),time=now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}),date=now.toLocaleDateString('vi-VN');$('#clk').innerHTML=`<span>${time}</span><small>${date}</small>`;$('#clk').title=now.toLocaleDateString('vi-VN',{weekday:'long',year:'numeric',month:'long',day:'numeric'})};tick();setInterval(tick,10000);
 run('note',{name:'Chào mừng.txt',text:fs['Chào mừng.txt']||''});

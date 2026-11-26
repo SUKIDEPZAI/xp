@@ -1,8 +1,8 @@
-# Windows XP Living Desktop — Autonomous Stickman Ultimate (v0.4.3)
+# Windows XP Living Desktop — Autonomous Stickman Ultimate (v0.4.5)
 
-A browser-first Windows XP Luna desktop simulation with local applications, autonomous 2D stickmen, Paint-based character creation and appearance editing, personality-generated animation, and an optional same-origin Node.js + Neon PostgreSQL account/sync service. The Electron shell remains available for local desktop use.
+A browser-first Windows XP Luna desktop simulation with local applications, autonomous 2D Stickmen, Paint-only character drawing, automatic appearance refinement, an articulated animation rig, per-character AI identities, a built-in llama.cpp local-inference adapter, and Neon PostgreSQL memory sharding. The Electron shell remains available for local desktop use.
 
-The simulation is a deterministic, rules-based character system. It is not a sentient agent and does not use a hosted LLM.
+When llama.cpp is configured, Stickmen send each character’s identity, traits, needs, memories, relationships and world context to the private local inference server; no paid API token is required. The local rules-based planner remains the fallback if inference is not configured or unavailable. Each character has a persistent mind record and independent memory stream; the model provider itself is shared, not a separate model process for every character. This is an agent simulation, not a claim of consciousness.
 
 ## Requirements
 
@@ -59,11 +59,38 @@ The migration runner uses `DATABASE_URL_UNPOOLED` when present, otherwise `DATAB
 - `GET|POST /api/v1/animations`, `PUT|DELETE /api/v1/animations/:id`
 - `GET|POST /api/v1/drawings`, `PUT|DELETE /api/v1/drawings/:id`
 - `GET|POST /api/v1/sync`
+- `GET /api/v1/ai/status`, `POST /api/v1/ai/think` (authenticated per-character AI gateway)
 - `GET /api/v1/health`, `GET /api/v1/ready`
 
 Passwords are hashed with Argon2id. The API sets an HttpOnly, SameSite=Strict session cookie (Secure in production), stores only an HMAC-SHA256 token hash keyed by `SESSION_SECRET`, rate-limits API routes, limits request size, checks same-origin writes, and filters every user-owned resource by the authenticated user. The sync transaction validates character ownership before accepting related memories, goals, relationships, drawings, and animations. The client stores its session only as a browser cookie; the cached account profile contains no credential.
 
 Cloud Sync uses IndexedDB as an offline cache/outbox and applies a last-write-wins policy using `updatedAt`. If a previously authenticated user goes offline, a manual sync snapshot is queued and retried on the next online event. Local-only data remains available without an account. The browser does not upload Notepad text, passwords typed into Notepad, or browser page contents.
+
+## Local AI with llama.cpp (no paid API tokens)
+
+The server supports `llama.cpp` directly through its `llama-server` OpenAI-compatible chat endpoint. Model weights run on the inference machine and are not included in this source archive. Node and Neon keep each Stickman's mind separate; llama.cpp provides the shared inference engine.
+
+### Option A — Docker Compose app + inference
+
+1. Install Docker Compose on a machine with enough RAM/CPU or supported GPU for your GGUF model.
+2. Create `models/` beside `docker-compose.llama.yml` and put your model file there as `model.gguf` (or set `LLAMA_CPP_MODEL_FILE` in your private `.env`). Review the model's license and choose a quantization that fits available memory.
+3. Copy `.env.example` to `.env`, then set Neon `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `SESSION_SECRET`, and optionally `AI_DATABASE_URLS`.
+4. Run `docker compose -f docker-compose.llama.yml up --build`.
+5. Open `http://localhost:8080`. Node reaches the inference service at `http://llama:8080/v1`; that port is not published to the public host.
+
+This uses the official `ghcr.io/ggml-org/llama.cpp:server` image and a read-only model mount. Upstream docs: [llama-server API](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md), [Docker](https://github.com/ggml-org/llama.cpp/blob/master/docs/docker.md).
+
+### Option B — native llama-server beside Node
+
+Install/build `llama-server` and place a GGUF model on the same host. Set `AI_BACKEND=llama.cpp`, `LLAMA_CPP_AUTOSTART=true`, `LLAMA_CPP_BIN=/path/to/llama-server`, and `LLAMA_CPP_MODEL_PATH=/path/to/model.gguf`. Set `LLAMA_CPP_BASE_URL=http://127.0.0.1:9931/v1`, `LLAMA_CPP_MODEL=local-model`, and tune `LLAMA_CPP_CTX_SIZE`, `LLAMA_CPP_THREADS`, `LLAMA_CPP_PARALLEL`, `LLAMA_CPP_TIMEOUT_MS` and `LLAMA_CPP_MAX_TOKENS`. The Node server starts/stops the native process; model and binary must already exist.
+
+### Option C — SnapDeploy app + private inference host
+
+Keep the Node/Neon app on SnapDeploy and run llama.cpp on a separate private inference host with sufficient memory. Set `AI_BACKEND=llama.cpp` and `LLAMA_CPP_BASE_URL=https://YOUR-PRIVATE-INFERENCE-HOST/v1` in private server settings. For HTTP on a trusted private network only, set `LLAMA_CPP_ALLOW_INSECURE_HTTP=true`. If the inference server uses a key, set `LLAMA_CPP_API_KEY` privately on the app and configure the matching `LLAMA_API_KEY` on llama-server.
+
+**Resource note:** SnapDeploy Small's 512 MB app container is suitable for Node/Neon, not for loading most GGUF models plus context. Multiple Neon databases increase memory-storage/shard capacity, not inference RAM or GPU. For an all-in-one deployment, the inference host must have enough memory for model weights, KV context and runtime overhead.
+
+`GET /api/v1/ai/status` reports backend, model label, whether a paid API token is required, native process state and llama-server `/health` readiness. `AI_DATABASE_URLS` remains supported for 1–8 Neon shards; keep shard count/order stable unless performing a planned data rebalance.
 
 ## Rust / WebAssembly
 
@@ -144,20 +171,70 @@ The tests are meaningful source/runtime smoke tests, not proof that every reques
 
 ## SnapDeploy port configuration
 
-This project must listen on an unprivileged container port. Set the SnapDeploy container/listener port to `8080` and use `npm start`. The server binds to `0.0.0.0` and reads the platform-provided `PORT`; it exits early with an actionable message if `PORT` is below `1024` (for example, `80`). Do not configure the Node process to listen on port `80`. Ensure the deployed source is version `0.4.2` or later. The image uses two Docker stages, and startup logs should identify `windows-xp-living-desktop@0.4.2`.
+This project must listen on an unprivileged container port. Set the SnapDeploy container/listener port to `8080` and use `npm start`. The server binds to `0.0.0.0` and reads the platform-provided `PORT`; it exits early with an actionable message if `PORT` is below `1024` (for example, `80`). Do not configure the Node process to listen on port `80`. Deploy version `0.4.5` or later. The Node image uses two Docker stages, and startup logs should identify `windows-xp-living-desktop@0.4.5`.
 
 
 
-## v0.4.3 — Paint-first Stickman workflow
+## v0.4.3 — Paint-first Stickman workflow (superseded in v0.4.4)
 
 - Removed the standalone Animation Studio loader/module and old studio-only UI styling. Removed the standalone artwork-library app from the documented app set; drawings and animation projects are surfaced inside each character profile instead.
-- Paint now has **Tạo Stickman** and **Chỉnh Stickman…** controls. New characters are created as separate structured Stickman profiles, then composited onto the canvas only when the user explicitly confirms creation. The operation records an undo snapshot.
+- In v0.4.3, Paint used a create-character control and an appearance selector. v0.4.4 supersedes the creation control with **Chế độ vẽ Stickman** on a separate draft layer; the existing appearance editor remains available for already-created characters.
 - The appearance editor adds head shape, skin tone, hair style/color, clothing/style color, accessories, expression, accent color, and a live preview. **Tối ưu ngoại hình** deterministically refines only the selected Stickman's structured appearance profile. It does not scan, classify, or rewrite any imported image or other Paint pixels.
 - Appearance is stored under `character.profile.appearance`, rendered by the desktop character renderer, and preserved in the existing PostgreSQL `profile jsonb` column. No database migration is required for this additive profile field.
 - New Stickmen receive an automatically generated multi-keyframe animation based on personality and selected traits. A separate **Tạo animation** action is available from the profile. Projects remain in IndexedDB and join the normal authenticated cloud-sync snapshot.
 - AI planner fixes include sensible initial needs rather than all-zero defaults, goal lifecycle progression, and memory-category cues for social and creative decisions. Renaming a character now preserves appearance.
 - The web browser adapter now matches Electron URL/search detection: single words and phrases are search queries, hostnames/local addresses remain navigations, and an explicit **Tìm** action forces search. Google, Bing and DuckDuckGo can be selected.
 
-## v0.4.3 — Verification boundaries
+## v0.4.3 — Verification boundaries (historical)
 
-`npm run check` and `npm test` pass in the source-editing environment. They cover syntax, appearance model validation, generated animation keyframes, AI need defaults, browser query routing, Electron IPC mocks, and HTTP server readiness behavior. Live Neon credentials and a SnapDeploy deployment were not available here; see `UPGRADE_REPORT.md` for the verification checklist and remaining limitations.
+`npm run check` and `npm test` pass in the source-editing environment. They cover syntax, appearance model validation, generated animation keyframes, AI need defaults, browser query routing, Electron IPC mocks, HTTP readiness and mocked llama.cpp requests. Live Neon credentials and a SnapDeploy deployment were not available here; see `UPGRADE_REPORT.md` for the verification checklist and remaining limitations.
+
+
+## v0.4.4 — Per-Stickman AI, drawing workflow and animation rig
+
+### Paint-first character creation
+
+1. Open **Paint** and choose **Chế độ vẽ Stickman**. This creates a dedicated, transparent draft layer separate from the existing Paint canvas.
+2. Draw the character using at least three clear strokes. Only the strokes captured in this mode are sent to the smoothing / vector-save module.
+3. Choose **Hoàn tất & Tự làm đẹp**. The app validates the draft, smooths its lines, generates a profile appearance and creates the character's individual mind record. The composite is committed to the Paint canvas only after character creation succeeds.
+4. Imported images, existing canvas pixels, and ordinary Paint strokes are never scanned or passed to the Stickman beautifier. The user must explicitly start and finish Stickman drawing mode.
+
+The appearance editor remains available from a character profile or Paint's **Chỉnh ngoại hình** selector. Updating appearance does not reset the mind or erase memories.
+
+### Central AI brain server
+
+- `GET /api/v1/ai/status` reports whether a server-side model adapter is configured.
+- `POST /api/v1/ai/think` is authenticated and owner-scoped. It accepts one character's bounded profile, needs, mind, memories and world context.
+- `server/ai-orchestrator.js` calls an OpenAI-compatible Chat Completions endpoint. It validates the returned action, emotion, learning deltas and animation motion plan before the renderer receives them. No API key is sent to the browser.
+- Each Stickman has a stable `mind ID`, seed, values, preferences, relationships, evolving disposition, long-term summary and bounded experience history. The same model can serve many Stickmen while their context and stored minds remain independent. The model is not a separately trained model per character.
+- In v0.4.5, `AI_BACKEND=llama.cpp` activates local inference without a paid API key. Set `LLAMA_CPP_BASE_URL` to the private llama-server `/v1` base URL; `LLAMA_CPP_MODEL` should match its alias.
+- The legacy OpenAI-compatible provider remains optional and requires `AI_API_KEY`, `AI_MODEL`, and `AI_API_URL` or `AI_API_BASE_URL`; it is not used when `AI_BACKEND=llama.cpp`. Keep keys in private server settings, never frontend code.
+
+### Multiple Neon memory shards
+
+`AI_DATABASE_URLS` may contain a JSON array of 1–8 pooled Neon connection strings. The AI store uses a deterministic FNV hash of the immutable character ID modulo the configured list length to select one shard. If absent, `AI_DATABASE_URL` is used, then `DATABASE_URL`. The primary `DATABASE_URL` is still required for user accounts, ownership checks and the main character profile.
+
+```env
+AI_DATABASE_URLS=["postgresql://...neon-shard-a-pooler...","postgresql://...neon-shard-b-pooler..."]
+```
+
+AI tables and indexes are created lazily on each selected shard; the normal account schema migration remains on the primary database. Keep the shard list, ordering and count stable after deployment. Changing the array can remap character IDs and requires a planned data rebalance; this release does not automatically copy existing shard data. Multi-Neon support is sharding, not automatic failover or replication.
+
+### Animation v2
+
+The runtime uses an articulated two-segment limb rig, bounded joint angles, personality-aware sequences, 24 FPS projects and smooth interpolation. Model-generated plans pass through a separate validator and are converted into rig keyframes. If a model omits or returns too few frames, a bounded idle → anticipation → action → settle sequence is generated locally instead of rendering an incomplete animation.
+
+### Windows XP desktop and Internet Explorer
+
+The Control Panel now manages Luna / Olive / Silver / Classic themes, wallpaper, desktop icons, Quick Launch, taskbar locking, simulated system sounds, pointer style, clock/date and supported display settings. In hosted browser mode, Internet Explorer uses isolated iframes and provides tabs, history, bookmarks, search engines and **Mở ngoài**. Some sites intentionally block iframe embedding (CSP / X-Frame-Options); the hosted page cannot override those site policies, so use **Mở ngoài** to view them in the real browser. In Electron, the app uses `WebContentsView` for actual browser rendering.
+
+### v0.4.4 verification
+
+Run:
+
+```bash
+npm run check
+npm test
+```
+
+The AI service test uses a mocked OpenAI-compatible endpoint to exercise the actual server adapter without requiring a real provider key. It verifies authorization header construction, character-specific context and validated motion plans. This does not prove a live provider or Neon deployment is reachable. See `UPGRADE_REPORT.md` for known boundaries and the release checklist.

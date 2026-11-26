@@ -12,3 +12,9 @@ ui/wasm-core/snippets/
 npm-debug.log*
 *.log
 coverage/
+
+# Local llama.cpp model weights and native server binaries
+models/*.gguf
+models/**/*.gguf
+llama-server
+llama-server.exe

@@ -12,21 +12,22 @@
   function safeAgent(a={}){
     const id=String(a.id||uid()),rawProfile=a.profile||XPAI.profile(a.name,id,a.personality),color=/^#[0-9a-f]{6}$/i.test(a.color||'')?a.color:'#202020';
     const profile={...rawProfile,appearance:window.XPStickmanAppearance?.normalize(rawProfile.appearance,color)||rawProfile.appearance||null};
+    profile.mind=XPAI.normalizeMind?.(rawProfile.mind,id,profile)||rawProfile.mind||XPAI.createMind?.(id,profile)||null;
     return{id,name:String(a.name||'Stickman').slice(0,32),color,personality:profile.personality||a.personality||'Curious',profile,
       state:a.state||'Idle',action:action(a.action),goal:String(a.goal||'Explore the desktop').slice(0,120),
       energy:Number.isFinite(a.energy)?clamp(a.energy,0,1):.8,happiness:Number.isFinite(a.happiness)?clamp(a.happiness,0,1):.6,
       needs:XPAI.normalizeNeeds(a.needs),emotion:a.emotion||'calm',goals:Array.isArray(a.goals)?a.goals.slice(0,30):[],repetition:Number.isFinite(a.repetition)?a.repetition:0,previousAction:action(a.previousAction||'idle'),
       x:Number.isFinite(a.x)?a.x:80+Math.random()*Math.max(80,desk.clientWidth-160),y:Number.isFinite(a.y)?a.y:desk.clientHeight-8,vx:Number.isFinite(a.vx)?a.vx:0,vy:Number.isFinite(a.vy)?a.vy:0,
       facing:a.facing===-1?-1:1,follow:!!a.follow,stay:!!a.stay,createdAt:a.createdAt||Date.now(),cloudOwnerId:a.cloudOwnerId||null,relationships:a.relationships&&typeof a.relationships==='object'?a.relationships:{},userAffinity:Number.isFinite(a.userAffinity)?a.userAffinity:0,
-      memoryCount:Number.isFinite(a.memoryCount)?a.memoryCount:0,lastActionAt:a.lastActionAt||0,lastEventAt:a.lastEventAt||0,lastDrawingAt:a.lastDrawingAt||0,lastAnimationAt:a.lastAnimationAt||0,memorySnapshot:Array.isArray(a.memorySnapshot)?a.memorySnapshot.slice(-180):[],cooldowns:a.cooldowns&&typeof a.cooldowns==='object'?a.cooldowns:{},bubble:'',bubbleUntil:0,poseTime:0,goalX:Number.isFinite(a.goalX)?a.goalX:null,actionStartedAt:a.actionStartedAt||Date.now(),visitedObjects:Array.isArray(a.visitedObjects)?a.visitedObjects.slice(-60):[],autonomy:a.autonomy!==false};
+      memoryCount:Number.isFinite(a.memoryCount)?a.memoryCount:0,lastActionAt:a.lastActionAt||0,lastEventAt:a.lastEventAt||0,lastDrawingAt:a.lastDrawingAt||0,lastAnimationAt:a.lastAnimationAt||0,memorySnapshot:Array.isArray(a.memorySnapshot)?a.memorySnapshot.slice(-180):[],cooldowns:a.cooldowns&&typeof a.cooldowns==='object'?a.cooldowns:{},bubble:'',bubbleUntil:0,poseTime:0,goalX:Number.isFinite(a.goalX)?a.goalX:null,actionStartedAt:a.actionStartedAt||Date.now(),visitedObjects:Array.isArray(a.visitedObjects)?a.visitedObjects.slice(-60):[],autonomy:a.autonomy!==false,brainBusy:false,brainNextAt:Number(a.brainNextAt)||0,modelDecision:null,modelDecisionUntil:0,motionProject:null,motionStartedAt:0,lastBrainAnimationSavedAt:Number(a.lastBrainAnimationSavedAt)||0,innerThought:String(a.innerThought||'').slice(0,320)};
   }
-  async function persist(agent){try{const {bubble,bubbleUntil,poseTime,memorySnapshot,...value}=agent;await XPStorage.saveCharacter({...value,updatedAt:Date.now()})}catch(error){console.warn('Không thể lưu stickman',error)}}
+  async function persist(agent){try{const {bubble,bubbleUntil,poseTime,memorySnapshot,brainBusy,brainNextAt,modelDecision,modelDecisionUntil,motionProject,motionStartedAt,...value}=agent;await XPStorage.saveCharacter({...value,updatedAt:Date.now()})}catch(error){console.warn('Không thể lưu stickman',error)}}
   async function addMemory(agent,message,kind='event',importance=.35,metadata={}){
     const content=String(message).slice(0,280),record={id:uid(),characterId:agent.id,text:content,kind:String(kind).slice(0,40),importance:clamp(importance,0,1),confidence:clamp(metadata.confidence??.8,0,1),metadata:{...metadata},at:Date.now(),createdAt:Date.now()};
     try{
       const current=await XPStorage.getMemories(agent.id);const duplicate=current.find(m=>m.text===content&&Date.now()-(m.at||0)<120000);
       if(duplicate)return duplicate;
-      await XPStorage.addMemory(record);agent.memorySnapshot=[...(agent.memorySnapshot||current),record].slice(-180);const all=[...current,record];
+      await XPStorage.addMemory(record);agent.memorySnapshot=[...(agent.memorySnapshot||current),record].slice(-180);XPAI.learnFromExperience?.(agent,record);const all=[...current,record];
       if(all.length>180){all.sort((a,b)=>((a.importance||.2)*.7+(a.confidence||.5)*.2+(1-Math.min(1,(Date.now()-(a.at||0))/(45*86400000)))*.1)-((b.importance||.2)*.7+(b.confidence||.5)*.2+(1-Math.min(1,(Date.now()-(b.at||0))/(45*86400000)))*.1));for(const old of all.slice(0,all.length-180))await XPStorage.deleteMemory(old.id)}
       agent.memoryCount=Math.min(all.length,180);await persist(agent);XPBus.emit('stickman:memory',{id:agent.id,name:agent.name,text:content,kind});return record;
     }catch(error){console.warn('Memory storage error',error);return null}
@@ -107,6 +108,34 @@
     const effects={blink:()=>{agent.x=clamp(agent.x+(agent.facing||1)*72,20,desk.clientWidth-20);bubble(agent,'Shadow Step!')},echo:()=>{setAction(agent,'wave');bubble(agent,'Echo Motion!')},bounce:()=>{agent.vy=-8;bubble(agent,'Energy Bounce!')},float:()=>{agent.vy=-5;bubble(agent,'Gravity Shift!')},draw:()=>createArtwork(agent),speed:()=>{agent.vx+=(agent.facing||1)*4;bubble(agent,'Super Speed!')},spark:()=>{addParticle(agent.x,agent.y-28,'#ffe066',12);bubble(agent,'Spark Burst!')},build:()=>{addParticle(agent.x,agent.y-15,'#7fd4ff',8);bubble(agent,'Tiny Builder!')}};
     effects[ability.effect]?.();addMemory(agent,`Đã sử dụng năng lực ${ability.name}.`,'ability',.65);
   }
+  function applyBrainDecision(agent,result,{showReply=false}={}){
+    const decision=result?.decision;if(!decision)return false;
+    const traits={...(agent.profile?.traits||{})};
+    for(const [key,delta] of Object.entries(decision.learning||{}))if(key in traits){const amount=Number(delta);if(Number.isFinite(amount))traits[key]=clamp(traits[key]+clamp(amount,-.025,.025),0,1)}
+    const previousMind=agent.profile?.mind||XPAI.createMind?.(agent.id,agent.profile)||{};
+    agent.profile={...agent.profile,traits,mind:{...previousMind,...(result.mind||{}),lastReasoning:String(decision.thought||'').slice(0,320),lastThoughtAt:Date.now(),model:{provider:result.provider?.provider||'central-ai',status:'connected'}}};
+    if(decision.goal)agent.goal=String(decision.goal).slice(0,140);
+    if(decision.emotion)agent.emotion=decision.emotion;
+    agent.innerThought=String(decision.thought||'').slice(0,320);
+    agent.modelDecision=decision;agent.modelDecisionUntil=Date.now()+9000;
+    if(decision.animation&&window.XPAnimation?.fromMotionPlan){
+      try{agent.motionProject=XPAnimation.fromMotionPlan(agent,{...decision.animation,action:decision.action});agent.motionStartedAt=performance.now();if(Date.now()-(agent.lastBrainAnimationSavedAt||0)>60000){agent.lastBrainAnimationSavedAt=Date.now();XPAnimation.save(agent.motionProject).catch(error=>console.warn('Could not save AI motion project',error))}}catch(error){console.warn('Invalid AI motion plan',error);agent.motionProject=null}
+    }
+    if(showReply&&decision.reply)bubble(agent,decision.reply,6500);
+    if(showReply&&decision.memory)addMemory(agent,decision.memory,'important',.42,{source:'central-ai'});
+    persist(agent);return true;
+  }
+  function requestBrain(agent,context={}, {force=false,showReply=false}={}){
+    const now=Date.now();if(!window.XPBrain||agent.brainBusy||(!force&&(!agent.autonomy||now<(agent.brainNextAt||0))))return Promise.resolve(null);
+    agent.brainBusy=true;agent.brainNextAt=now+25000;
+    return window.XPBrain.think(agent,context).then(result=>{
+      if(result?.mode==='model'&&result.decision){applyBrainDecision(agent,result,{showReply});return result}
+      agent.profile={...agent.profile,mind:{...(agent.profile?.mind||{}),model:{provider:'server-gateway',status:'local-fallback'}}};agent.brainNextAt=Date.now()+60000;persist(agent);return result;
+    }).catch(error=>{
+      agent.profile={...agent.profile,mind:{...(agent.profile?.mind||{}),model:{provider:'server-gateway',status:'unavailable'}}};
+      agent.brainNextAt=Date.now()+(error.status===401?120000:60000);console.warn(`Central AI unavailable for ${agent.name}:`,error.message);return null;
+    }).finally(()=>{agent.brainBusy=false});
+  }
   function updateGoal(agent,context,now){
     let goal=agent.goals.find(item=>item.status==='active');
     if(goal){
@@ -149,8 +178,11 @@
       if(world&&world.id!==agent.lastWorldObject){agent.lastWorldObject=world.id;if(world.type==='icon')agent.visitedObjects.push(world.id)}
       if(agent.autonomy){
         agent.repetition=agent.previousAction===agent.action?agent.repetition+1:0;agent.previousAction=agent.action;
-        const decision=XPAI.decide(agent,context);execute(agent,decision,context,now);
+        const modelDecision=agent.modelDecision&&Date.now()<agent.modelDecisionUntil?agent.modelDecision:null;
+        const decision=modelDecision?.action||XPAI.decide(agent,context);execute(agent,decision,context,now);
       }
+      const newestEvent=recent?.type?`${recent.type}: ${recent.label||recent.title||''}`:'';
+      if(agent.autonomy)requestBrain(agent,{event:newestEvent,nearbyObject:world?.label||world?.type||'',pointerNear,nearCharacter:!!near,paintOpen:context.paintOpen});
     }
   }
   function physics(dt){
@@ -172,9 +204,11 @@
   function render(now){
     ctx.clearRect(0,0,desk.clientWidth,desk.clientHeight);
     for(const agent of agents.values()){
-      const walking=['walk','run','explore','follow','sneak','escape'].includes(agent.action),pose=window.XPAnimation?.poseFor(agent.action,agent.poseTime)||{armL:[0,16],armR:[0,16],legL:[0,20],legR:[0,20],bob:Math.sin(agent.poseTime/250)};
-      const x=agent.x,y=agent.y+(walking?Math.sin(agent.poseTime/105)*.8:0),facing=agent.facing||1;
-      ctx.save();ctx.translate(x,y);ctx.scale(facing,1);window.XPAnimation?.draw(ctx,0,0,pose,agent.color,1,{},agent.profile?.appearance);ctx.restore();
+      const walking=['walk','run','explore','follow','sneak','escape'].includes(agent.action);
+      let motion=null;if(agent.motionProject){const frameNumber=Math.max(0,(now-agent.motionStartedAt)*agent.motionProject.fps/1000);if(frameNumber<agent.motionProject.duration-1)motion=window.XPAnimation?.interpolate(agent.motionProject,frameNumber)||null;else agent.motionProject=null}
+      const pose=motion?.poseData||window.XPAnimation?.poseFor(agent.action,agent.poseTime)||{armL:[0,16],armR:[0,16],legL:[0,20],legR:[0,20],bob:Math.sin(agent.poseTime/250)};
+      const x=agent.x+(motion?.x||0),y=agent.y+(motion?.y||0)+(walking&&!motion?Math.sin(agent.poseTime/105)*.8:0),facing=agent.facing||1;
+      ctx.save();ctx.translate(x,y);ctx.scale(facing,1);window.XPAnimation?.draw(ctx,0,0,pose,motion?.color||agent.color,motion?.scale||1,{},agent.profile?.appearance);ctx.restore();
       ctx.font='11px Tahoma';ctx.textAlign='center';ctx.lineWidth=3;ctx.strokeStyle='rgba(0,0,0,.62)';ctx.strokeText(agent.name,x,y-54);ctx.fillStyle='#fff';ctx.fillText(agent.name,x,y-54);
       if(agent.bubble&&now<agent.bubbleUntil){const bw=Math.max(54,ctx.measureText(agent.bubble).width+14),bx=clamp(x-bw/2,4,desk.clientWidth-bw-4),by=Math.max(5,y-87);ctx.fillStyle='#fffde8';ctx.strokeStyle='#344e7a';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(bx,by,bw,23,5);ctx.fill();ctx.stroke();ctx.fillStyle='#172b4d';ctx.font='11px Tahoma';ctx.fillText(agent.bubble,bx+bw/2,by+15)}
     }
@@ -204,21 +238,34 @@
     await window.XPWasm?.ready;
     const id=uid(),name=String(input.name||'Stickman').trim().slice(0,32)||'Stickman',personality=input.personality||'Curious',color=/^#[0-9a-f]{6}$/i.test(input.color||'')?input.color:'#202020',profile=XPAI.profile(name,id,personality);
     profile.appearance=window.XPStickmanAppearance?.normalize(input.appearance||window.XPStickmanAppearance?.create(id,color,personality),color)||null;
+    profile.mind=XPAI.createMind?.(id,profile)||null;
     const agent=safeAgent({id,name,color,profile,personality,state:'Idle',action:'idle',x:60+Math.random()*Math.max(50,desk.clientWidth-120),y:desk.clientHeight-8});
     agent.memorySnapshot=[];agents.set(id,agent);ensureLoop();await persist(agent);await addMemory(agent,`Đã tạo nhân vật ${name}.`,'milestone',.9);
     XPBus.emit('stickman:created',{id,name,personality});XPBus.emit('desktop:event',{kind:'stickman-created',id,name});
     // Every new character receives a unique, personality-driven animation project.
     await createAnimation(agent,{force:true});await persist(agent);return agent;
   }
-  async function updateAppearance(id,{color,appearance}={}){
+  async function updateAppearance(id,{color,appearance,name,personality}={}){
     const agent=agents.get(id);if(!agent)return false;
     if(/^#[0-9a-f]{6}$/i.test(color||''))agent.color=color;
+    if(typeof name==='string'&&name.trim())agent.name=name.trim().slice(0,32);
+    const nextPersonality=window.XPAI.PERSONALITIES.includes(personality)?personality:agent.personality;
+    if(nextPersonality!==agent.personality){const previous=agent.profile;agent.personality=nextPersonality;const fresh=XPAI.profile(agent.name,agent.id,nextPersonality,previous.traits);agent.profile={...fresh,sketchAssetId:previous.sketchAssetId,mind:previous.mind}}
     agent.profile={...agent.profile,appearance:window.XPStickmanAppearance?.normalize(appearance,agent.color)||agent.profile.appearance};
-    await persist(agent);await addMemory(agent,'Ngoại hình nhân vật được cập nhật trong Paint.','milestone',.75);
+    await persist(agent);await addMemory(agent,'Ngoại hình hoặc hồ sơ cá nhân được cập nhật trong Paint.','milestone',.75);
     XPBus.emit('stickman:appearance-changed',{id:agent.id,name:agent.name});return true;
   }
   function findHit(clientX,clientY){const r=desk.getBoundingClientRect(),x=clientX-r.left,y=clientY-r.top;for(const agent of [...agents.values()].reverse())if(Math.hypot(x-agent.x,y-(agent.y-25))<26)return agent;return null}
   document.addEventListener('dblclick',event=>{const agent=findHit(event.clientX,event.clientY);if(!agent)return;event.preventDefault();event.stopPropagation();window.showStickmanProfile?.(agent.id)},true);
+  async function attachDrawing(id,assetId){const agent=agents.get(id);if(!agent)return false;agent.profile={...agent.profile,sketchAssetId:String(assetId||'').slice(0,100)};await persist(agent);return true}
+  async function chat(id,message){
+    const agent=agents.get(id),content=String(message||'').trim().slice(0,1200);if(!agent||!content)return false;
+    await addMemory(agent,`Người dùng nói: ${content}`,'interaction',.68,{source:'user-chat'});
+    if(agent.brainBusy){bubble(agent,'Mình đang suy nghĩ một chút nhé…');return false}
+    const result=await requestBrain(agent,{event:'user-chat',userMessage:content},{force:true,showReply:true});
+    if(result?.mode==='model'&&result.decision){agent.userAffinity=clamp(agent.userAffinity+1,0,100);await addMemory(agent,`Mình đã trả lời: ${result.decision.reply||result.decision.thought||'Đã phản hồi.'}`,'interaction',.52,{source:'central-ai'});await persist(agent);return true}
+    bubble(agent,'Bộ não AI trung tâm chưa kết nối. Mình vẫn ghi nhớ và suy nghĩ bằng bộ não cục bộ.',6000);return false;
+  }
   async function command(id,commandName){
     const agent=agents.get(id);if(!agent)return false;const commandValue=String(commandName||'').toLowerCase();
     if(commandValue==='follow'){agent.follow=true;agent.stay=false;setAction(agent,'follow');bubble(agent,'Mình đi theo nhé!')}
@@ -232,7 +279,7 @@
     else return false;
     await persist(agent);ensureLoop();return true;
   }
-  async function rename(id){const agent=agents.get(id);if(!agent)return;const name=prompt('Tên nhân vật:',agent.name);if(!name?.trim())return;agent.name=name.trim().slice(0,32);const appearance=agent.profile.appearance;agent.profile={...XPAI.profile(agent.name,agent.id,agent.personality,agent.profile.traits),appearance};await persist(agent);await addMemory(agent,`Tên nhân vật đã đổi thành ${agent.name}.`,'milestone',.75)}
+  async function rename(id){const agent=agents.get(id);if(!agent)return;const name=prompt('Tên nhân vật:',agent.name);if(!name?.trim())return;agent.name=name.trim().slice(0,32);const previous=agent.profile;agent.profile={...XPAI.profile(agent.name,agent.id,agent.personality,previous.traits),appearance:previous.appearance,mind:previous.mind,sketchAssetId:previous.sketchAssetId};await persist(agent);await addMemory(agent,`Tên nhân vật đã đổi thành ${agent.name}.`,'milestone',.75)}
   async function duplicate(id){const a=agents.get(id);if(!a)return;return spawn({name:`${a.name} Copy`,color:a.color,personality:a.personality,appearance:a.profile.appearance})}
   async function remove(id){const agent=agents.get(id);if(!agent)return false;if(!confirm(`Xóa stickman ${agent.name} và toàn bộ ký ức của nhân vật này?`))return false;agents.delete(id);await XPStorage.deleteCharacter(id);await XPStorage.clearMemories(id);if(!agents.size&&animationFrame){cancelAnimationFrame(animationFrame);animationFrame=0;running=false;ctx.clearRect(0,0,desk.clientWidth,desk.clientHeight)}return true}
   async function remember(id,message='Người dùng yêu cầu ghi nhớ một sự kiện.'){const agent=agents.get(id);if(agent)await addMemory(agent,message,'important',1)}
@@ -240,12 +287,12 @@
     const agent=agents.get(id);if(!agent)return;const memories=(await XPStorage.getMemories(id)).sort((a,b)=>b.at-a.at),body=document.createElement('div');body.className='memory-view';
     const title=document.createElement('h3');title.textContent=`Ký ức của ${agent.name}`;body.append(title);const list=document.createElement('div');list.className='memory-list';
     memories.slice(0,150).forEach(memory=>{const row=document.createElement('p');row.textContent=`${new Date(memory.at).toLocaleString('vi-VN')} · ${memory.text}`;list.append(row)});body.append(list);
-    const actions=document.createElement('div');actions.className='bar';const clear=document.createElement('button');clear.textContent='Xóa ký ức';clear.onclick=async()=>{if(confirm('Xóa toàn bộ ký ức của nhân vật?')){await XPStorage.clearMemories(id);agent.memoryCount=0;await persist(agent);list.replaceChildren()}};
+    const actions=document.createElement('div');actions.className='bar';const clear=document.createElement('button');clear.textContent='Xóa ký ức';clear.onclick=async()=>{if(confirm('Xóa toàn bộ ký ức của nhân vật?')){await XPStorage.clearMemories(id);agent.memoryCount=0;agent.memorySnapshot=[];agent.profile={...agent.profile,mind:{...(agent.profile?.mind||{}),experienceCount:0,experiences:[],longTermSummary:''}};await persist(agent);list.replaceChildren()}};
     const exportBtn=document.createElement('button');exportBtn.textContent='Xuất JSON';exportBtn.onclick=()=>downloadJSON({character:agent,memories},`${agent.name}-memory.json`);actions.append(clear,exportBtn);body.append(actions);XPWM.create({title:`Memory — ${agent.name}`,icon:'🧠',width:480,height:420,appId:'memory',build:winBody=>winBody.append(body)});
   }
   function downloadJSON(value,filename){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
   function showProfile(id){const agent=agents.get(id);if(agent)window.showStickmanProfile?.(id)}
-  window.XPStickman=Object.freeze({spawn,load,list:()=>[...agents.values()],get:id=>agents.get(id),findHit,command,rename,duplicate,remove,remember,showMemory,showProfile,updateAppearance,generateAnimation:id=>{const agent=agents.get(id);return agent?createAnimation(agent,{force:true}):Promise.resolve(null)},
+  window.XPStickman=Object.freeze({spawn,load,list:()=>[...agents.values()],get:id=>agents.get(id),findHit,command,chat,attachDrawing,rename,duplicate,remove,remember,showMemory,showProfile,updateAppearance,generateAnimation:id=>{const agent=agents.get(id);return agent?createAnimation(agent,{force:true}):Promise.resolve(null)},
     setAutonomy:(id,enabled)=>{const a=agents.get(id);if(a){a.autonomy=!!enabled;persist(a)}},
     exportAll:async()=>{const values=[];for(const agent of agents.values())values.push({character:agent,memories:await XPStorage.getMemories(agent.id)});downloadJSON(values,'xp-stickmen-backup.json')},
     importAll:async values=>{for(const item of values||[]){if(!item.character?.id)continue;const agent=safeAgent(item.character);agents.set(agent.id,agent);await persist(agent);for(const memory of item.memories||[])await XPStorage.addMemory({...memory,characterId:agent.id})}ensureLoop()}

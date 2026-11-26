@@ -1,4 +1,4 @@
-# Implementation Status — Windows XP Living Desktop 0.4.3
+# Implementation Status — Windows XP Living Desktop (v0.4.5 current; v0.4.3/v0.4.4 historical)
 
 ## Implemented in this source revision
 
@@ -97,3 +97,42 @@
 - The AI brain is a deterministic utility planner with bounded event memories; it is not a hosted LLM or sentient model. A deeper next step is memory summarization, long-term retrieval, explainable multi-step goals, and per-character action outcome learning.
 - Cloud sync remains user/account initiated, with queued offline snapshots retried when connectivity returns; automatic real-time sync on every local mutation is not implemented.
 - In web hosting, external pages may reject iframe embedding through their own CSP or X-Frame-Options. Use **Mở ngoài** for those sites.
+
+## v0.4.4 — Paint drawing mode, central AI, articulated rig and XP updates
+
+### Paint / Stickman authoring
+- Replaced the Paint creation dialog entry point with **Chế độ vẽ Stickman** and an isolated transparent draft canvas. Only fresh strokes captured in this mode are smoothed and saved; imported images and pre-existing Paint pixels are not inspected.
+- Added drawing validation (stroke/point caps, bounds, length), Chaikin smoothing and consistent stroke width. The user explicitly chooses **Hoàn tất & Tự làm đẹp** before the character is created and committed to the main canvas.
+- Creation is atomic with respect to Paint: the draft is not committed to the canvas until the new character/mind has been created successfully. Vector sketch is attached to the character profile.
+
+### Appearance / animation
+- Reworked the preview renderer to use a consistent downward-angle coordinate system, upper/lower limb joints and grounded left/right foot anchors; increased and recentered the appearance preview.
+- Added safe fallback choreography when the model does not return enough motion frames. Model keyframes and joint angles are validated before being passed to the animation rig.
+- Existing appearance editor remains for editing characters; rename/appearance updates preserve mind identity and memories.
+
+### Per-character AI and multi-Neon memory
+- Added a unique per-character mind identity with seed, values, preferences/action counts, relationships, disposition, experience history and long-term summary.
+- Added server-side OpenAI-compatible model adapter with authenticated `/api/v1/ai/status` and `/api/v1/ai/think` routes. Model keys remain on the server; each request contains one character's context and is ownership-checked.
+- Server validates actions, emotions, learning deltas and motion plans; missing animation receives a local safe fallback. Model can be left unconfigured, in which case local planner remains active.
+- Added `server/ai-store.js` with lazy AI table creation and `AI_DATABASE_URLS` deterministic character-ID sharding across up to 8 Neon databases. Main `DATABASE_URL` remains required for account/auth/character ownership.
+
+### Windows XP experience / browser
+- Expanded Control Panel settings: XP themes, wallpaper, icons, Quick Launch, taskbar lock, simulated sounds, pointer style, clock/date and supported resolution controls.
+- Browser supports tabs/history/bookmarks/search engines and open-external fallback. In hosted web mode, third-party iframe restrictions remain enforced by those sites; Electron uses WebContentsView.
+
+### Verification boundaries
+- `npm run check`: PASS.
+- `npm test`: PASS, including a mocked OpenAI-compatible request/response through the real server adapter.
+- Live AI provider, Neon, Docker, Rust/WASM and SnapDeploy were not verified because the required private credentials/toolchains/deployment access were unavailable.
+- A headless Chromium screenshot pass did not complete in the tool environment; real-browser visual acceptance remains required after deployment.
+- Multiple Neon URLs must retain a stable order and count; this release does not rebalance existing mind data when the shard set changes.
+
+
+## v0.4.5 — llama.cpp local inference integration
+
+- Added no-paid-token `AI_BACKEND=llama.cpp` adapter and optional native llama-server process lifecycle.
+- Added official llama.cpp server Docker Compose stack with private internal inference port and read-only GGUF model mount.
+- Local results now pass the same memory/learning persistence path as remote model results.
+- AI status reports backend, token requirement, process state and model health.
+- Added llama.cpp regression tests; `npm run check` and `npm test` pass.
+- Neon mind sharding remains 1–8 configured databases. SnapDeploy Small should host Node/Neon only; use a private inference host for the model.

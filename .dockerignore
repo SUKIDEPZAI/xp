@@ -12,3 +12,8 @@ rust-core/target
 ui/wasm-core/*.wasm
 ui/wasm-core/*.js
 ui/wasm-core/*.d.ts
+
+# GGUF weights are mounted into inference service, never copied into Node image
+models
+llama-server
+llama-server.exe

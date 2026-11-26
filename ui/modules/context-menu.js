@@ -103,7 +103,7 @@
         item('Copy',()=>paint.copy?.()),
         item('Paste',()=>paint.paste?.()),
         item('Select All',()=>paint.selectAll?.()),
-        item('Tạo Stickman trong Paint',()=>paint.createStickman?.()),
+        item('Bật chế độ vẽ Stickman',()=>paint.startStickmanMode?.()),
         item('Export',()=>paint.export?.())
       ]);return;
     }
@@ -136,7 +136,7 @@
         item('Sort By Type',()=>window.arrangeDesktopIcons?.('type')),
         item('Auto Arrange',()=>window.setAutoArrange?.(!document.body.classList.contains('auto-arrange')),null,document.body.classList.contains('auto-arrange')),
         item('Align to Grid',()=>document.body.classList.toggle('align-grid'),null,document.body.classList.contains('align-grid')),
-        item('New',null,[item('Folder',()=>window.createVirtualItem?.('folder')),item('Text Document',()=>window.createVirtualItem?.('text')),item('Shortcut',()=>window.createVirtualItem?.('shortcut')),item('New Stickman',()=>window.createStickman?.()),item('New Drawing',()=>window.launchApp?.('paint'))]),
+        item('New',null,[item('Folder',()=>window.createVirtualItem?.('folder')),item('Text Document',()=>window.createVirtualItem?.('text')),item('Shortcut',()=>window.createVirtualItem?.('shortcut')),item('Draw Stickman in Paint',()=>window.createStickman?.()),item('New Drawing',()=>window.launchApp?.('paint'))]),
         item('Properties',()=>window.launchApp?.('control'))
       ]);
     }

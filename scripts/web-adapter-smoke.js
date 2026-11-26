@@ -39,7 +39,8 @@ class FakeElement {
   assert.ok(states.length >= 1, 'Electron-compatible listener registered before session creation must receive its first state');
   assert.equal(states.at(-1).tabs.length, 1);
   assert.equal(host.children.length, 1);
-  assert.equal(host.children[0].attributes.sandbox, 'allow-scripts allow-forms allow-downloads');
+  assert.equal(host.children[0].attributes.sandbox, 'allow-scripts allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-presentation');
+  assert.equal(host.children[0].attributes.allow, 'fullscreen; autoplay; clipboard-read; clipboard-write');
 
   await window.xpHost.browser.command('browser-test', 'navigate', { url: 'https://example.org/path' });
   assert.equal(states.at(-1).tabs[0].url, 'https://example.org/path');
@@ -67,5 +68,5 @@ class FakeElement {
   off();
   window.xpHost.browser.destroy('browser-test');
   assert.equal(host.children[0].removed, true);
-  console.log('PASS: web adapter browser lifecycle, sandbox, protocol validation and subscribe-before-create ordering');
+  console.log('PASS: web adapter browser lifecycle, sandboxed external navigation, protocol validation and subscribe-before-create ordering');
 })().catch(error => { console.error(error); process.exitCode = 1; });

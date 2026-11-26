@@ -11,7 +11,7 @@ html,body{margin:0;height:100%;overflow:hidden;font:11px Tahoma,Verdana,sans-ser
 #tasks{flex:1;display:flex;gap:3px;padding:0 6px;overflow:hidden}
 .tbn{width:150px;height:23px;border:0;border-radius:3px;background:#3c81f3;color:#fff;font:11px Tahoma;text-align:left;white-space:nowrap;overflow:hidden;cursor:pointer}
 .tbn.on{background:#1e52b7;box-shadow:inset 1px 1px 3px #000}
-#clk{height:30px;line-height:30px;padding:0 12px;color:#fff;background:linear-gradient(#0f9bf0,#1290e8);border-left:1px solid #0c59b9}
+#clk{height:30px;min-width:78px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:1px 9px;color:#fff;background:linear-gradient(#0f9bf0,#1290e8);border-left:1px solid #0c59b9;line-height:13px}#clk span{font:11px Tahoma}#clk small{font:9px Tahoma;color:#e8f3ff}#clk.clock-date-hidden small{display:none}
 #sm{position:absolute;left:0;bottom:30px;width:340px;z-index:99998;border:2px solid #0831d9;border-radius:8px 8px 0 0;background:#fff;overflow:hidden}
 #sm[hidden]{display:none}
 .sh{background:linear-gradient(#1c5be0,#3c8bf3);color:#fff;font:bold 14px Tahoma;padding:10px}
@@ -134,7 +134,7 @@ html,body{width:100%;height:100%;overflow:hidden}
 .stickman-profile p{margin:6px 0}
 .memory-list{max-height:250px;overflow:auto;background:white;border:1px solid #aaa;padding:4px}
 .memory-list p{margin:4px;padding:4px;border-bottom:1px solid #ddd;font-size:11px}
-.taskbar-locked #quick-launch{pointer-events:none}
+.taskbar-locked #task{box-shadow:inset 0 1px 0 #ffffff55}.xp-pointer-precision,.xp-pointer-precision *{cursor:crosshair!important}
 @media(max-width:760px){#quick-launch{display:none}.tbn{min-width:75px}.browser-toolbar{gap:2px}.browser-toolbar button{padding:2px 4px}.browser-engine{max-width:88px}}
 
 
@@ -250,3 +250,46 @@ body.xp-wallpaper-night #desk:after{content:'';position:absolute;inset:0;pointer
 .profile-asset span{overflow-wrap:anywhere}
 .stickman-tab-prank{animation:stickmanTabPrank .22s ease-in-out 5}
 @keyframes stickmanTabPrank{0%,100%{transform:translate(0,0) rotate(0)}25%{transform:translate(-4px,2px) rotate(-2deg)}75%{transform:translate(4px,-2px) rotate(2deg)}}
+
+/* Windows XP refinement: native Luna spacing, responsive dialogs and AI console. */
+#st{background:linear-gradient(#73c45b 0%,#3d9e37 25%,#288728 78%,#1d681d 100%);box-shadow:inset 0 1px 1px #d8ffd0,2px 0 3px #103d83}
+.win{background:#ece9d8;border:2px solid #0a3fd0;border-top:0;border-radius:8px 8px 2px 2px;box-shadow:3px 5px 14px #001b4a66}
+.tb{background:linear-gradient(180deg,#2d8bfa 0%,#1875eb 8%,#0a5fe8 45%,#0753d2 90%,#1749b8 100%)}
+.window-control{box-shadow:inset 0 1px 1px #fff8}
+.browser-page-host{background:#fff}
+.web-browser-frame{background:#fff}
+.browser-status{font:10px Tahoma;color:#3c5069;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.paint-mode-status{font:10px Tahoma;min-height:20px}
+.stickman-draft-layer{display:block;max-width:none;max-height:none}
+.xp-dialog-shade{overflow:auto;padding:12px;align-items:center;justify-items:center}
+.xp-dialog{max-height:calc(100dvh - 24px);overscroll-behavior:contain}
+.xp-stickman-creator{width:min(820px,96vw);max-height:calc(100dvh - 24px);overflow:auto;padding:14px}
+.stickman-creator-layout{grid-template-columns:minmax(0,1.25fr) minmax(230px,.75fr);gap:16px}
+.stickman-creator-preview-panel{position:sticky;top:0;min-width:0}
+.stickman-creator-preview{width:min(260px,100%);height:auto;aspect-ratio:260/250;object-fit:contain}
+.xp-stickman-creator .dialog-actions{position:sticky;bottom:-14px;z-index:2;background:#ece9d8;padding:9px 0 2px;border-top:1px solid #c6c2b5}
+.stickman-chat-input{display:block;width:100%;min-height:52px;padding:6px;border:1px solid #7f9db9;background:#fff;font:12px Tahoma;resize:vertical;user-select:text}
+.profile-section{min-width:0}
+.profile-actions{flex-wrap:wrap}
+.brain-server-panel{padding:12px;overflow:auto;max-height:100%;background:#f4f3ee;color:#24344c}
+.brain-server-panel section{padding:10px;margin:0 0 12px;border:1px solid #9aabc2;background:#fff}
+.brain-server-panel h3{margin:8px 0;color:#124a9d}
+.brain-server-status{font-weight:bold;color:#193f78;line-height:1.5}
+.brain-agent-row{display:flex;gap:8px;align-items:center;padding:6px;border-bottom:1px solid #d6dce5}
+.brain-agent-row b{min-width:90px}.brain-agent-row small{flex:1;color:#566579}
+.brain-server-note{padding:8px;background:#e7eef9;border-left:3px solid #2b68ba}
+@media(max-width:760px){
+ .stickman-creator-layout{grid-template-columns:1fr}
+ .stickman-creator-preview-panel{position:static;order:-1}
+ .xp-stickman-creator{width:96vw;max-height:calc(100dvh - 12px);padding:10px}
+ .stickman-creator-controls{grid-template-columns:1fr 1fr}
+ .brain-agent-row{flex-wrap:wrap}.brain-agent-row small{flex-basis:100%;order:3}
+}
+@media(max-height:620px){
+ .xp-dialog-shade{place-items:start center}
+ .xp-stickman-creator{max-height:calc(100dvh - 12px)}
+ .stickman-creator-preview{width:180px}
+}
+
+/* v0.4.4: sharper Windows XP Control Panel and Stickman preview */
+.control-panel label{font:11px Tahoma;color:#263c5c;line-height:1.35}.control-panel input[type=checkbox]{width:auto;height:auto;margin:0 5px 0 0;display:inline-block;vertical-align:middle}.control-panel section{border-radius:2px;box-shadow:inset 0 1px 0 #fff}.control-panel section h3{border-bottom:1px solid #dce5f0;padding-bottom:5px;width:100%}.stickman-creator-preview{width:min(240px,100%);aspect-ratio:260/250;height:auto;background:linear-gradient(#f8fbff,#edf3fa)}#clk{line-height:12px!important}

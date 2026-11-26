@@ -79,8 +79,8 @@
     frame.title = tab.title || 'Website';
     frame.referrerPolicy = 'no-referrer';
     frame.loading = 'eager';
-    frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-downloads');
-    frame.setAttribute('allow', 'fullscreen; autoplay');
+    frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-presentation');
+    frame.setAttribute('allow', 'fullscreen; autoplay; clipboard-read; clipboard-write');
     frame.addEventListener('load', () => {
       tab.loading = false;
       if (tab.url === NEW_TAB) tab.title = 'Tab mới';

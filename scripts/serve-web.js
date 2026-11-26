@@ -6,6 +6,8 @@ const path=require('node:path');
 const {URL}=require('node:url');
 const {handleApi}=require('../server/api');
 const {pingDatabase,closeDatabase}=require('../server/database');
+const llamaRuntime=require('../server/llama-runtime');
+if(llamaRuntime.enabled()){try{llamaRuntime.start()}catch(error){console.error('[llama.cpp] Autostart configuration failed:',error.message)}}
 
 const ROOT=path.resolve(__dirname,'..','ui');
 const PORT=Number.parseInt(process.env.PORT||'8080',10);
@@ -48,6 +50,6 @@ const server=http.createServer(async(req,res)=>{
 server.listen(PORT,HOST,()=>process.stdout.write(`XP Living Desktop listening on http://${HOST}:${PORT}\n`));
 server.on('error',error=>{console.error(error);process.exitCode=1});
 let shuttingDown=false;
-async function shutdown(signal){if(shuttingDown)return;shuttingDown=true;process.stdout.write(`Received ${signal}; shutting down.\n`);server.close(async()=>{try{await closeDatabase()}catch(error){console.error('Database shutdown error:',error.message)}process.exit(0)});setTimeout(()=>process.exit(1),10000).unref()}
+async function shutdown(signal){if(shuttingDown)return;shuttingDown=true;process.stdout.write(`Received ${signal}; shutting down.\n`);server.close(async()=>{try{await llamaRuntime.stop()}catch(error){console.error('llama.cpp shutdown error:',error.message)}try{await closeDatabase()}catch(error){console.error('Database shutdown error:',error.message)}process.exit(0)});setTimeout(()=>process.exit(1),10000).unref()}
 process.on('SIGTERM',()=>shutdown('SIGTERM'));
 process.on('SIGINT',()=>shutdown('SIGINT'));

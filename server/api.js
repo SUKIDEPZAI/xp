@@ -3,7 +3,7 @@ const crypto=require('node:crypto');
 const {URL}=require('node:url');
 const {getDatabase,pingDatabase}=require('./database');
 const COOKIE='xp_session',SESSION_MS=30*24*60*60*1000,MAX_BODY=1024*1024;
-const limitBuckets=new Map();
+const limitBuckets=new Map(),aiThrottle=new Map();
 const now=()=>new Date();
 const json=(res,status,payload,extra={})=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin',...extra});res.end(JSON.stringify(payload))};
 function hashSessionToken(value){const secret=process.env.SESSION_SECRET||'';if(Buffer.byteLength(secret)<32)throw Object.assign(new Error('SESSION_SECRET must contain at least 32 bytes'),{code:'SESSION_SECRET_NOT_CONFIGURED'});return crypto.createHmac('sha256',secret).update(value).digest('hex')}
@@ -16,7 +16,8 @@ function rateLimit(req){
   const key=`${req.socket.remoteAddress||'unknown'}:${req.url.split('?')[0]}`,time=Date.now(),entry=limitBuckets.get(key)||{start:time,count:0};
   if(time-entry.start>60000){entry.start=time;entry.count=0}entry.count++;limitBuckets.set(key,entry);
   if(limitBuckets.size>2000)for(const [k,v]of limitBuckets)if(time-v.start>120000)limitBuckets.delete(k);
-  return entry.count<=35;
+  const maximum=req.url.split('?')[0]==='/api/v1/ai/think'?120:35;
+  return entry.count<=maximum;
 }
 function cookies(req){const value=req.headers.cookie||'';return Object.fromEntries(value.split(';').map(part=>part.trim().split('=').map(decodeURIComponent)).filter(p=>p.length===2))}
 function cookieHeader(token,maxAge=SESSION_MS/1000){const secure=process.env.NODE_ENV==='production'?'; Secure':'';return `${COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure}`}
@@ -24,6 +25,7 @@ async function readBody(req){return new Promise((resolve,reject)=>{let size=0,ch
 function sameOrigin(req){const origin=req.headers.origin;if(!origin)return true;try{const parsed=new URL(origin),proxyProtocol=String(req.headers['x-forwarded-proto']||'').split(',')[0].trim(),protocol=proxyProtocol|| (req.socket.encrypted?'https':'http');return parsed.host===req.headers.host&&parsed.protocol===`${protocol}:`}catch{return false}}
 async function currentUser(req){const token=cookies(req)[COOKIE];if(!token||token.length>160)return null;const {eq,and,gt}=require('drizzle-orm');const {db,schema}=getDatabase(),{users,sessions}=schema;const rows=await db.select({id:users.id,username:users.username,email:users.email}).from(sessions).innerJoin(users,eq(sessions.userId,users.id)).where(and(eq(sessions.tokenHash,hashSessionToken(token)),gt(sessions.expiresAt,now()))).limit(1);return rows[0]||null}
 function clamp(n,min,max,fallback=0){const v=Number(n);return Number.isFinite(v)?Math.max(min,Math.min(max,v)):fallback}
+function deriveDisposition(traits={}){const v=k=>clamp(traits[k]??.5,0,1,.5);const ranked=[['Thân thiện',v('sociability')*.55+v('empathy')*.45],['Ham khám phá',v('curiosity')*.55+v('creativity')*.45],['Năng động',v('playfulness')*.6+v('energy')*.4],['Điềm tĩnh và suy xét',v('patience')*.55+v('cautiousness')*.45],['Quyết đoán',v('confidence')*.55+v('competitiveness')*.45]].sort((a,b)=>b[1]-a[1]);return ranked[0][0]}
 function cleanCharacter(value,userId){const profile=object(value.profile),personalityName=bounded(profile.personality||value.personality?.name||value.personality,40)||'Curious';return{id:bounded(value.id,100),userId,name:bounded(value.name,32)||'Stickman',color:isColor(value.color)?value.color:'#202020',personality:{name:personalityName},profile,needs:object(value.needs),energy:clamp(value.energy,0,1,.8),emotion:bounded(value.emotion,40)||'calm',currentState:bounded(value.state||value.currentState,40)||'Idle',currentGoal:bounded(value.goal||value.currentGoal,160),position:{x:clamp(value.x??value.position?.x,-100000,100000),y:clamp(value.y??value.position?.y,-100000,100000)},version:Math.max(1,Math.floor(clamp(value.version,1,100000,1))),updatedAt:new Date(Number(value.updatedAt)||Date.now())}}
 function cleanMemory(value,userId){return{id:bounded(value.id,100)||id(),characterId:bounded(value.characterId,100),userId,memoryType:bounded(value.kind||value.memoryType,40)||'event',content:bounded(value.text||value.content,280),importance:clamp(value.importance,0,1,.3),confidence:clamp(value.confidence,0,1,.8),metadata:object(value.metadata),createdAt:new Date(Number(value.at||value.createdAt)||Date.now()),lastAccessed:now()}}
 function cleanAnimation(value,userId){return{id:bounded(value.id,100)||id(),userId,characterId:value.characterId?bounded(value.characterId,100):null,name:bounded(value.name,120)||'Untitled Animation',fps:Math.floor(clamp(value.fps,1,60,24)),loop:!!value.loop,timeline:{version:1,duration:clamp(value.duration,1,10000,48),frames:Array.isArray(value.frames)?value.frames.slice(0,500):[]},metadata:object(value.metadata),version:Math.max(1,Math.floor(clamp(value.version,1,100000,1))),updatedAt:new Date(Number(value.updatedAt)||Date.now())}}
@@ -73,6 +75,80 @@ async function handleApi(req,res){
       const token=cookies(req)[COOKIE];let user=null;if(token){const [row]=await db.select({id:users.id,username:users.username,email:users.email}).from(sessions).innerJoin(users,eq(sessions.userId,users.id)).where(and(eq(sessions.tokenHash,hashSessionToken(token)),gt(sessions.expiresAt,now()))).limit(1);user=row||null}json(res,200,{user});return true;
     }
     const user=await requireUser(req,res);if(!user)return true;
+
+    if(parts[2]==='ai'&&parts[3]==='status'&&req.method==='GET'){
+      const brain=require('./ai-orchestrator'),provider=brain.providerInfo(),runtime=require('./llama-runtime').status(),inference=await brain.inferenceHealthCheck();
+      json(res,200,{mode:provider.configured?(provider.backend==='llama.cpp'?'model-local':'model'):'local-fallback',configured:provider.configured,provider:provider.provider,backend:provider.backend,model:provider.model,requiresApiToken:provider.requiresApiToken,runtime,inference,memoryStore:!!(process.env.AI_DATABASE_URLS||process.env.AI_DATABASE_URL||process.env.DATABASE_URL)});return true;
+    }
+    if(parts[2]==='ai'&&parts[3]==='think'&&req.method==='POST'){
+      const body=await readBody(req),incoming=object(body.character),characterId=bounded(incoming.id,100);
+      if(!characterId||incoming.id!==characterId){json(res,400,{error:'validation',message:'A valid Stickman ID is required'});return true}
+      const brain=require('./ai-orchestrator'),provider=brain.providerInfo();
+      if(!provider.configured){json(res,200,{mode:'local-fallback',decision:null,provider});return true}
+      const throttleKey=`${user.id}:${characterId}`,lastCall=aiThrottle.get(throttleKey)||0;
+      if(Date.now()-lastCall<1600){json(res,429,{error:'brain_throttled',message:'Please wait before asking this character again'});return true}
+      aiThrottle.set(throttleKey,Date.now());
+      const [existing]=await db.select().from(characters).where(and(eq(characters.id,characterId),eq(characters.userId,user.id))).limit(1);
+      if(!existing){
+        const row=cleanCharacter({...incoming,profile:object(incoming.profile)},user.id);
+        await db.insert(characters).values(row).onConflictDoNothing();
+      }
+      const [owned]=await db.select().from(characters).where(and(eq(characters.id,characterId),eq(characters.userId,user.id))).limit(1);
+      if(!owned){json(res,404,{error:'character_not_found'});return true}
+      const store=require('./ai-store');
+      try{
+        const profile=object(incoming.profile||owned.profile),clientMind=object(body.mind||profile.mind),storedMind=object(await store.loadMind(user.id,characterId));
+        const cloudMemories=await store.loadExperiences(user.id,characterId,12);
+        const memoryMap=new Map();
+        for(const item of [...(Array.isArray(storedMind.experiences)?storedMind.experiences:[]),...(Array.isArray(clientMind.experiences)?clientMind.experiences:[]),...cloudMemories]){
+          if(item?.id)memoryMap.set(String(item.id),item);
+        }
+        const localMemories=Array.isArray(body.memories)?body.memories.slice(-12):[];
+        for(const item of localMemories)if(item?.id)memoryMap.set(String(item.id),item);
+        const mergedExperiences=[...memoryMap.values()].slice(-40);
+        const clientIsNewer=Number(clientMind.updatedAt||0)>=Number(storedMind.updatedAt||0);
+        const mind={...clientMind,...storedMind,id:`mind-${characterId}`,characterId,seed:Number(storedMind.seed||clientMind.seed)||0,
+          createdAt:storedMind.createdAt||clientMind.createdAt||Date.now(),experiences:mergedExperiences,
+          experienceCount:Math.max(Number(storedMind.experienceCount)||0,Number(clientMind.experienceCount)||0,mergedExperiences.length),
+          values:clientIsNewer?{...object(storedMind.values),...object(clientMind.values)}:{...object(clientMind.values),...object(storedMind.values)},
+          preferences:clientIsNewer?{...object(storedMind.preferences),...object(clientMind.preferences)}:{...object(clientMind.preferences),...object(storedMind.preferences)},
+          relationships:{...object(clientMind.relationships),...object(storedMind.relationships)},disposition:bounded((clientIsNewer?clientMind.disposition:storedMind.disposition)||'Đang hình thành',60)};
+        const combined=new Map();for(const item of [...cloudMemories,...localMemories])if(item?.id)combined.set(String(item.id),item);
+        const memories=[...combined.values()].slice(-8);
+        const character={...incoming,id:characterId,profile,personality:incoming.personality||owned.personality?.name||profile.personality||'Curious',needs:object(incoming.needs),action:bounded(incoming.action,40),goal:bounded(incoming.goal,140),emotion:bounded(incoming.emotion,40)};
+        const result=await brain.think({character,context:object(body.context),memories,mind});
+        if(brain.isModelResult(result.mode)&&result.decision){
+          const nowMs=Date.now(),experienceMap=new Map(mergedExperiences.map(item=>[String(item.id),item]));
+          const incomingExperiences=new Map();
+          for(const item of [...memories,...(Array.isArray(clientMind.experiences)?clientMind.experiences.slice(-5):[])])if(item?.id)incomingExperiences.set(String(item.id),item);
+          for(const item of incomingExperiences.values())await store.recordExperience(user.id,characterId,item);
+          if(result.decision.memory){
+            const generated={id:`thought-${crypto.randomUUID()}`,kind:'reflection',text:result.decision.memory.slice(0,220),at:nowMs,importance:.42,metadata:{action:result.decision.action,source:'central-ai'}};
+            experienceMap.set(generated.id,generated);await store.recordExperience(user.id,characterId,generated);
+          }
+          const learning=object(result.decision.learning),nextTraits={...object(profile.traits)};
+          for(const [key,delta] of Object.entries(learning))if(key in nextTraits)nextTraits[key]=clamp(Number(nextTraits[key])+clamp(delta,-.025,.025),0,1);
+          const nextValues={...object(mind.values)};
+          if(learning.curiosity!==undefined)nextValues.curiosity=clamp(Number(nextValues.curiosity??.5)+clamp(learning.curiosity,-.025,.025),0,1);
+          if(learning.empathy!==undefined)nextValues.kindness=clamp(Number(nextValues.kindness??.5)+clamp(learning.empathy,-.025,.025),0,1);
+          if(learning.creativity!==undefined)nextValues.creativity=clamp(Number(nextValues.creativity??.5)+clamp(learning.creativity,-.025,.025),0,1);
+          if(learning.confidence!==undefined)nextValues.independence=clamp(Number(nextValues.independence??.5)+clamp(learning.confidence,-.025,.025),0,1);
+          const nextExperiences=[...experienceMap.values()].slice(-40);
+          const addedCount=Math.max(0,nextExperiences.length-mergedExperiences.length);
+          const nextMind={...mind,values:nextValues,experienceCount:Math.max(mind.experienceCount+addedCount,nextExperiences.length),experiences:nextExperiences,
+            disposition:deriveDisposition(nextTraits),lastReasoning:result.decision.thought||'',lastThoughtAt:nowMs,updatedAt:nowMs,model:{provider:provider.provider,status:'connected'}};
+          const nextProfile={...profile,traits:nextTraits,mind:nextMind};
+          await store.saveMind(user.id,characterId,nextMind);
+          await store.recordDecision(user.id,characterId,result.decision);
+          await db.update(characters).set({profile:nextProfile,updatedAt:now()}).where(and(eq(characters.id,characterId),eq(characters.userId,user.id)));
+          json(res,200,{...result,mind:nextMind,profile:nextProfile});return true;
+        }
+        json(res,200,{mode:'local-fallback',decision:null,provider});return true;
+      }catch(error){
+        console.error('Stickman AI orchestration error:',error.message);
+        json(res,503,{error:'brain_unavailable',message:'The central AI brain or its memory database is temporarily unavailable'});return true;
+      }
+    }
 
     if(parts[2]==='desktop'&&parts[3]==='settings'){
       if(req.method==='GET'){const [row]=await db.select().from(desktopSettings).where(eq(desktopSettings.userId,user.id)).limit(1);json(res,200,{settings:row||null});return true}
